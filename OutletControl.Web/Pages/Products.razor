@@ -1,0 +1,924 @@
+﻿@page "/admin/products"
+
+@using Microsoft.AspNetCore.Components.Forms
+@using OutletControl.Contracts.Catalog
+@using OutletControl.Contracts.Catalog.Import
+@using OutletControl.Web.Services
+@using Microsoft.AspNetCore.Authorization
+
+@attribute [Authorize(Roles = "Owner,Admin")]
+
+
+@inject CatalogApiService CatalogApiService
+@inject UploadApiService UploadApiService
+@inject NavigationManager Navigation
+
+<PageTitle>المنتجات - Outlet Control</PageTitle>
+
+<div class="products-page" dir="rtl">
+    <div class="products-shell">
+
+        <header class="page-header">
+            <div class="page-title">
+                <span class="page-eyebrow">إدارة النظام</span>
+                <h1>المنتجات</h1>
+                <p>إدارة المنتجات والأسعار والصور والاستيراد الجماعي</p>
+            </div>
+
+            <button type="button"
+                    class="back-btn"
+                    @onclick="GoDashboard">
+                رجوع
+            </button>
+        </header>
+
+        <div class="content-grid">
+
+            <section class="form-card">
+
+                <div class="card-header">
+                    <div>
+                        <span class="card-eyebrow">
+                            @(_editingProduct is null ? "منتج جديد" : "تعديل المنتج")
+                        </span>
+
+                        <h2>
+                            @(_editingProduct is null ? "إضافة منتج" : "تعديل المنتج")
+                        </h2>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>اسم المنتج</label>
+
+                    <input @bind="_name"
+                           placeholder="مثال: كونو شوكولاتة" />
+                </div>
+
+                <div class="form-group">
+                    <label>التصنيف</label>
+
+                    <select @bind="_categoryId">
+                        <option value="0">اختر التصنيف</option>
+
+                        @foreach (var category in _categories)
+                        {
+                            <option value="@category.Id">
+                                @category.Name
+                            </option>
+                        }
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>سعر البيع</label>
+
+                    <div class="money-input">
+                        <input type="number"
+                               min="0"
+                               step="0.01"
+                               @bind="_sellingPrice" />
+
+                        <span>ج</span>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>صورة المنتج</label>
+
+                    <InputFile OnChange="HandleImageSelected"
+                               accept=".jpg,.jpeg,.png,.webp"
+                               class="file-input" />
+
+                    <small>
+                        JPG أو PNG أو WEBP - بحد أقصى 20 MB
+                    </small>
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(_previewUrl))
+                {
+                    <div class="image-preview-wrapper">
+                        <img src="@_previewUrl"
+                             alt="معاينة الصورة"
+                             class="image-preview" />
+
+                        <button type="button"
+                                class="remove-image-btn"
+                                @onclick="RemoveSelectedImage">
+                            إزالة الصورة
+                        </button>
+                    </div>
+                }
+
+                <div class="form-group">
+                    <label>الترتيب</label>
+
+                    <input type="number"
+                           min="0"
+                           @bind="_displayOrder" />
+                </div>
+
+                @if (_editingProduct is not null)
+                {
+                    <label class="checkbox-row">
+                        <input type="checkbox"
+                               @bind="_isActive" />
+
+                        <span>المنتج نشط</span>
+                    </label>
+                }
+
+                @if (!string.IsNullOrWhiteSpace(_message))
+                {
+                    <div class="@GetMessageCss()">
+                        @_message
+                    </div>
+                }
+
+                <div class="form-actions">
+
+                    <button type="button"
+                            class="save-btn"
+                            disabled="@_isSaving"
+                            @onclick="SaveAsync">
+
+                        @(_isSaving
+                            ? "جاري الحفظ..."
+                            : _editingProduct is null
+                                ? "إضافة المنتج"
+                                : "حفظ التعديلات")
+                    </button>
+
+                    @if (_editingProduct is not null)
+                    {
+                        <button type="button"
+                                class="cancel-btn"
+                                @onclick="CancelEdit">
+                            إلغاء التعديل
+                        </button>
+                    }
+
+                </div>
+
+            </section>
+
+            <section class="list-card">
+
+                <section class="excel-import-card">
+
+                    <div class="excel-import-header">
+                        <div>
+                            <span class="card-eyebrow">إضافة جماعية</span>
+                            <h2>استيراد المنتجات من Excel</h2>
+                            <p>ارفع ملف XLSX وسيتم فحصه قبل إضافة أي منتج.</p>
+                        </div>
+
+                        <div class="excel-icon">XLSX</div>
+                    </div>
+
+                    <div class="excel-format">
+                        <span>ترتيب الأعمدة المطلوب</span>
+                        <code>Name | Category | SellingPrice | DisplayOrder | IsActive | ImageUrl</code>
+                    </div>
+
+                    <div class="excel-upload-row">
+
+                        <div class="excel-file-box">
+                            <InputFile OnChange="HandleImportFileSelected"
+                                       accept=".xlsx"
+                                       class="excel-file-input" />
+
+                            @if (_importFile is not null)
+                            {
+                                <div class="selected-file">
+                                    <strong>@_importFile.Name</strong>
+                                    <span>@FormatFileSize(_importFile.Size)</span>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="selected-file muted">
+                                    <strong>اختر ملف المنتجات</strong>
+                                    <span>Excel بصيغة XLSX</span>
+                                </div>
+                            }
+                        </div>
+
+                        <button type="button"
+                                class="preview-import-btn"
+                                disabled="@(_importFile is null || _isPreviewing || _isImporting)"
+                                @onclick="PreviewImportAsync">
+
+                            @(_isPreviewing
+                                ? "جاري الفحص..."
+                                : "معاينة الملف")
+                        </button>
+
+                    </div>
+
+                    @if (!string.IsNullOrWhiteSpace(_importMessage))
+                    {
+                        <div class="@GetImportMessageCss()">
+                            @_importMessage
+                        </div>
+                    }
+
+                    @if (_importPreview is not null)
+                    {
+                        <div class="import-summary-grid">
+                            <div>
+                                <span>إجمالي الصفوف</span>
+                                <strong>@_importPreview.TotalRows</strong>
+                            </div>
+
+                            <div class="valid">
+                                <span>صحيح</span>
+                                <strong>@_importPreview.ValidRows</strong>
+                            </div>
+
+                            <div class="@(_importPreview.InvalidRows > 0 ? "invalid" : "")">
+                                <span>به أخطاء</span>
+                                <strong>@_importPreview.InvalidRows</strong>
+                            </div>
+                        </div>
+
+                        <div class="preview-table-wrapper">
+                            <table class="preview-table">
+                                <thead>
+                                    <tr>
+                                        <th>الصف</th>
+                                        <th>المنتج</th>
+                                        <th>التصنيف</th>
+                                        <th>السعر</th>
+                                        <th>الترتيب</th>
+                                        <th>الحالة</th>
+                                        <th>النتيجة</th>
+                                    </tr>
+                                </thead>
+
+                                <tbody>
+                                    @foreach (var row in _importPreview.Rows)
+                                    {
+                                        <tr class="@(!row.IsValid ? "invalid-row" : "")">
+                                            <td>@row.RowNumber</td>
+                                            <td>@row.Name</td>
+                                            <td>@row.CategoryName</td>
+                                            <td>@row.SellingPrice.ToString("0.##") ج</td>
+                                            <td>@row.DisplayOrder</td>
+                                            <td>@(row.IsActive ? "نشط" : "متوقف")</td>
+                                            <td>
+                                                @if (row.IsValid)
+                                                {
+                                                    <span class="preview-status valid">جاهز</span>
+                                                }
+                                                else
+                                                {
+                                                    <div class="row-errors">
+                                                        @foreach (var error in row.Errors)
+                                                        {
+                                                            <span>@error</span>
+                                                        }
+                                                    </div>
+                                                }
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div class="import-confirm-row">
+
+                            <div>
+                                <strong>
+                                    @_importPreview.ValidRows منتج جاهز للاستيراد
+                                </strong>
+
+                                @if (_importPreview.InvalidRows > 0)
+                                {
+                                    <span>
+                                        الصفوف التي تحتوي على أخطاء لن يتم استيرادها.
+                                    </span>
+                                }
+                            </div>
+
+                            <button type="button"
+                                    class="confirm-import-btn"
+                                    disabled="@(_importPreview.ValidRows == 0 || _isImporting)"
+                                    @onclick="ImportProductsAsync">
+
+                                @(_isImporting
+                                    ? "جاري الاستيراد..."
+                                    : "استيراد المنتجات الصحيحة")
+                            </button>
+
+                        </div>
+                    }
+
+                    @if (_importResult is not null)
+                    {
+                        <div class="import-result">
+                            <strong>
+                                تم استيراد @_importResult.ImportedRows من @_importResult.TotalRows منتج.
+                            </strong>
+
+                            @if (_importResult.FailedRows > 0)
+                            {
+                                <span>
+                                    تعذر استيراد @_importResult.FailedRows صف.
+                                </span>
+                            }
+                        </div>
+                    }
+
+                </section>
+
+                <div class="list-header">
+                    <div>
+                        <span class="card-eyebrow">القائمة الحالية</span>
+                        <h2>المنتجات الحالية</h2>
+                    </div>
+
+                    <div class="list-tools">
+                        <span class="count-badge">
+                            @FilteredProducts.Count منتج
+                        </span>
+
+                        <select @bind="_filterCategoryId"
+                                @bind:after="ApplyFilter">
+                            <option value="0">كل التصنيفات</option>
+
+                            @foreach (var category in _categories)
+                            {
+                                <option value="@category.Id">
+                                    @category.Name
+                                </option>
+                            }
+                        </select>
+                    </div>
+                </div>
+
+                @if (_isLoading)
+                {
+                    <div class="state-message">
+                        جاري التحميل...
+                    </div>
+                }
+                else if (FilteredProducts.Count == 0)
+                {
+                    <div class="empty-state">
+                        <div class="empty-icon">📦</div>
+                        <strong>لا توجد منتجات</strong>
+                        <span>ابدأ بإضافة أول منتج أو غيّر التصنيف المحدد.</span>
+                    </div>
+                }
+                else
+                {
+                    <div class="products-grid">
+
+                        @foreach (var product in FilteredProducts)
+                        {
+                            <article class="@GetProductCardCss(product)">
+
+                                <div class="product-image-wrapper">
+                                    @if (!string.IsNullOrWhiteSpace(product.ImageUrl))
+                                    {
+                                        <img src="@product.ImageUrl"
+                                             alt="@product.Name"
+                                             class="product-image" />
+                                    }
+                                    else
+                                    {
+                                        <div class="product-image-placeholder">
+                                            <span>🍦</span>
+                                            <small>لا توجد صورة</small>
+                                        </div>
+                                    }
+
+                                    <span class="@GetStatusCss(product)">
+                                        @(product.IsActive ? "نشط" : "متوقف")
+                                    </span>
+                                </div>
+
+                                <div class="product-info">
+                                    <span class="category-name">
+                                        @product.CategoryName
+                                    </span>
+
+                                    <h3>@product.Name</h3>
+
+                                    <div class="product-meta">
+                                        <div>
+                                            <span>سعر البيع</span>
+                                            <strong>
+                                                @product.SellingPrice.ToString("0.##") ج
+                                            </strong>
+                                        </div>
+
+                                        <div>
+                                            <span>الترتيب</span>
+                                            <strong>@product.DisplayOrder</strong>
+                                        </div>
+                                    </div>
+
+                                    <button type="button"
+                                            class="edit-btn"
+                                            @onclick="() => Edit(product)">
+                                        تعديل المنتج
+                                    </button>
+                                </div>
+
+                            </article>
+                        }
+
+                    </div>
+                }
+
+            </section>
+
+        </div>
+    </div>
+</div>
+
+@code {
+    private const long MaxImportFileSize =
+        10 * 1024 * 1024;
+
+    private readonly List<CategoryDto> _categories = new();
+    private readonly List<ProductDto> _products = new();
+
+    private ProductDto? _editingProduct;
+
+    private string _name = string.Empty;
+    private int _categoryId;
+    private decimal _sellingPrice;
+    private string? _imageUrl;
+    private int _displayOrder;
+    private bool _isActive = true;
+    private int _filterCategoryId;
+
+    private bool _isLoading = true;
+    private bool _isSaving;
+    private bool _success;
+
+    private string? _message;
+
+    private IBrowserFile? _selectedImage;
+    private string? _previewUrl;
+
+    private IBrowserFile? _importFile;
+    private ProductImportPreviewDto? _importPreview;
+    private ProductImportResultDto? _importResult;
+
+    private bool _isPreviewing;
+    private bool _isImporting;
+    private bool _importSuccess;
+    private string? _importMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            _isLoading = true;
+
+            _categories.Clear();
+            _products.Clear();
+
+            var categories =
+                await CatalogApiService.GetCategoriesAsync();
+
+            _categories.AddRange(
+                categories
+                    .Where(x => x.IsActive)
+                    .OrderBy(x => x.DisplayOrder));
+
+            var products =
+                await CatalogApiService.GetProductsAsync();
+
+            _products.AddRange(
+                products
+                    .OrderBy(x => x.CategoryName)
+                    .ThenBy(x => x.DisplayOrder));
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private List<ProductDto> FilteredProducts =>
+        _filterCategoryId == 0
+            ? _products
+            : _products
+                .Where(x => x.CategoryId == _filterCategoryId)
+                .ToList();
+
+    private void ApplyFilter()
+    {
+    }
+
+    private async Task HandleImageSelected(
+        InputFileChangeEventArgs e)
+    {
+        try
+        {
+            _message = null;
+            _success = false;
+
+            var file = e.File;
+
+            const long maxFileSize =
+                20 * 1024 * 1024;
+
+            if (file.Size > maxFileSize)
+            {
+                _message =
+                    "حجم الصورة يجب ألا يزيد عن 20 MB.";
+                return;
+            }
+
+            var allowedTypes = new[]
+            {
+                "image/jpeg",
+                "image/png",
+                "image/webp"
+            };
+
+            if (!allowedTypes.Contains(
+                    file.ContentType,
+                    StringComparer.OrdinalIgnoreCase))
+            {
+                _message = "نوع الصورة غير مدعوم.";
+                return;
+            }
+
+            _selectedImage = file;
+
+            await using var stream =
+                file.OpenReadStream(maxFileSize);
+
+            using var memoryStream =
+                new MemoryStream();
+
+            await stream.CopyToAsync(memoryStream);
+
+            var base64 =
+                Convert.ToBase64String(
+                    memoryStream.ToArray());
+
+            _previewUrl =
+                $"data:{file.ContentType};base64,{base64}";
+        }
+        catch (Exception ex)
+        {
+            _success = false;
+            _message = ex.Message;
+        }
+    }
+
+    private void RemoveSelectedImage()
+    {
+        _selectedImage = null;
+        _previewUrl = null;
+        _imageUrl = null;
+    }
+
+    private void HandleImportFileSelected(
+        InputFileChangeEventArgs e)
+    {
+        _importPreview = null;
+        _importResult = null;
+        _importMessage = null;
+        _importSuccess = false;
+
+        var file = e.File;
+
+        if (!file.Name.EndsWith(
+                ".xlsx",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            _importFile = null;
+            _importMessage =
+                "الملف يجب أن يكون بصيغة XLSX.";
+            return;
+        }
+
+        if (file.Size > MaxImportFileSize)
+        {
+            _importFile = null;
+            _importMessage =
+                "حجم ملف Excel يجب ألا يزيد عن 10 MB.";
+            return;
+        }
+
+        _importFile = file;
+    }
+
+    private async Task PreviewImportAsync()
+    {
+        if (_importFile is null)
+        {
+            return;
+        }
+
+        try
+        {
+            _isPreviewing = true;
+            _importSuccess = false;
+            _importMessage = null;
+            _importPreview = null;
+            _importResult = null;
+
+            await using var stream =
+                _importFile.OpenReadStream(
+                    MaxImportFileSize);
+
+            var result =
+                await CatalogApiService
+                    .PreviewProductsImportAsync(
+                        stream,
+                        _importFile.Name,
+                        string.IsNullOrWhiteSpace(
+                            _importFile.ContentType)
+                            ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                            : _importFile.ContentType);
+
+            if (result is null)
+            {
+                _importMessage =
+                    "تعذر معاينة ملف المنتجات.";
+                return;
+            }
+
+            _importPreview = result;
+
+            _importSuccess =
+                result.InvalidRows == 0;
+
+            _importMessage =
+                result.InvalidRows == 0
+                    ? "تم فحص الملف بنجاح، وكل الصفوف جاهزة للاستيراد."
+                    : "تم فحص الملف. راجع الصفوف التي تحتوي على أخطاء.";
+        }
+        catch (Exception ex)
+        {
+            _importSuccess = false;
+            _importMessage = ex.Message;
+        }
+        finally
+        {
+            _isPreviewing = false;
+        }
+    }
+
+    private async Task ImportProductsAsync()
+    {
+        if (_importFile is null ||
+            _importPreview is null ||
+            _importPreview.ValidRows == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            _isImporting = true;
+            _importSuccess = false;
+            _importMessage = null;
+            _importResult = null;
+
+            await using var stream =
+                _importFile.OpenReadStream(
+                    MaxImportFileSize);
+
+            var result =
+                await CatalogApiService
+                    .ImportProductsAsync(
+                        stream,
+                        _importFile.Name,
+                        string.IsNullOrWhiteSpace(
+                            _importFile.ContentType)
+                            ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                            : _importFile.ContentType);
+
+            if (result is null)
+            {
+                _importMessage =
+                    "تعذر استيراد المنتجات.";
+                return;
+            }
+
+            _importResult = result;
+
+            _importSuccess =
+                result.ImportedRows > 0;
+
+            _importMessage =
+                result.ImportedRows > 0
+                    ? $"تم استيراد {result.ImportedRows} منتج بنجاح."
+                    : "لم يتم استيراد أي منتج.";
+
+            await LoadAsync();
+
+            if (result.ImportedRows > 0)
+            {
+                _importPreview = null;
+            }
+        }
+        catch (Exception ex)
+        {
+            _importSuccess = false;
+            _importMessage = ex.Message;
+        }
+        finally
+        {
+            _isImporting = false;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_name))
+        {
+            _success = false;
+            _message = "اكتب اسم المنتج.";
+            return;
+        }
+
+        if (_categoryId <= 0)
+        {
+            _success = false;
+            _message = "اختر التصنيف.";
+            return;
+        }
+
+        if (_sellingPrice < 0)
+        {
+            _success = false;
+            _message = "سعر البيع غير صحيح.";
+            return;
+        }
+
+        try
+        {
+            _isSaving = true;
+            _success = false;
+            _message = null;
+
+            if (_selectedImage is not null)
+            {
+                const long maxFileSize =
+                    20 * 1024 * 1024;
+
+                await using var stream =
+                    _selectedImage.OpenReadStream(
+                        maxFileSize);
+
+                var uploadedImageUrl =
+                    await UploadApiService
+                        .UploadProductImageAsync(
+                            stream,
+                            _selectedImage.Name,
+                            _selectedImage.ContentType);
+
+                if (string.IsNullOrWhiteSpace(
+                        uploadedImageUrl))
+                {
+                    _message =
+                        "تعذر رفع صورة المنتج.";
+                    return;
+                }
+
+                _imageUrl = uploadedImageUrl;
+            }
+
+            if (_editingProduct is null)
+            {
+                await CatalogApiService.CreateProductAsync(
+                    new CreateProductRequest
+                    {
+                        Name = _name,
+                        CategoryId = _categoryId,
+                        SellingPrice = _sellingPrice,
+                        ImageUrl = _imageUrl,
+                        DisplayOrder = _displayOrder
+                    });
+            }
+            else
+            {
+                await CatalogApiService.UpdateProductAsync(
+                    _editingProduct.Id,
+                    new UpdateProductRequest
+                    {
+                        Name = _name,
+                        CategoryId = _categoryId,
+                        SellingPrice = _sellingPrice,
+                        ImageUrl = _imageUrl,
+                        DisplayOrder = _displayOrder,
+                        IsActive = _isActive
+                    });
+            }
+
+            ResetForm();
+            await LoadAsync();
+
+            _success = true;
+            _message =
+                "تم حفظ المنتج بنجاح.";
+        }
+        catch (Exception ex)
+        {
+            _success = false;
+            _message = ex.Message;
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    private void Edit(ProductDto product)
+    {
+        _editingProduct = product;
+        _name = product.Name;
+        _categoryId = product.CategoryId;
+        _sellingPrice = product.SellingPrice;
+        _imageUrl = product.ImageUrl;
+        _previewUrl = product.ImageUrl;
+        _selectedImage = null;
+        _displayOrder = product.DisplayOrder;
+        _isActive = product.IsActive;
+        _message = null;
+    }
+
+    private void CancelEdit()
+    {
+        ResetForm();
+    }
+
+    private void ResetForm()
+    {
+        _editingProduct = null;
+        _name = string.Empty;
+        _categoryId = 0;
+        _sellingPrice = 0;
+        _imageUrl = null;
+        _previewUrl = null;
+        _selectedImage = null;
+        _displayOrder = 0;
+        _isActive = true;
+    }
+
+    private string GetMessageCss()
+    {
+        return _success
+            ? "message success"
+            : "message error";
+    }
+
+    private string GetImportMessageCss()
+    {
+        return _importSuccess
+            ? "message success import-message"
+            : "message error import-message";
+    }
+
+    private string GetStatusCss(ProductDto product)
+    {
+        return product.IsActive
+            ? "product-status active"
+            : "product-status inactive";
+    }
+
+    private string GetProductCardCss(ProductDto product)
+    {
+        return product.IsActive
+            ? "product-card"
+            : "product-card inactive-product";
+    }
+
+    private static string FormatFileSize(long bytes)
+    {
+        if (bytes < 1024)
+        {
+            return $"{bytes} B";
+        }
+
+        if (bytes < 1024 * 1024)
+        {
+            return $"{bytes / 1024d:0.#} KB";
+        }
+
+        return $"{bytes / 1024d / 1024d:0.##} MB";
+    }
+
+    private void GoDashboard()
+    {
+        Navigation.NavigateTo("/dashboard");
+    }
+}

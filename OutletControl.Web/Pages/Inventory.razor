@@ -1,0 +1,353 @@
+﻿@page "/inventory"
+
+@using OutletControl.Contracts.Inventory
+@using OutletControl.Web.Services
+@using OutletControl.Web.Auth
+@using Microsoft.AspNetCore.Authorization
+
+@inject InventoryApiService InventoryApiService
+@inject OutletControlAuthenticationStateProvider AuthStateProvider
+@inject NavigationManager Navigation
+
+@attribute [Authorize(Roles = "Owner,Cashier,Admin")]
+
+<PageTitle>المخزون - Outlet Control</PageTitle>
+
+<div class="inventory-page" dir="rtl">
+
+    <div class="inventory-shell">
+
+        <header class="inventory-header">
+
+            <div class="inventory-title">
+                <span class="inventory-eyebrow">المخزون</span>
+                <h1>المخزون الحالي</h1>
+
+                <p>
+                    @if (CanViewFinancialValues)
+                    {
+                        <span>متابعة الكميات وقيمة المخزون الموجودة في المنفذ</span>
+                    }
+                    else
+                    {
+                        <span>متابعة الكميات الموجودة في المنفذ</span>
+                    }
+                </p>
+            </div>
+
+            <button type="button"
+                    class="back-btn"
+                    @onclick="GoBack">
+                رجوع
+            </button>
+
+        </header>
+
+        @if (_isLoading)
+        {
+            <div class="state-message">
+                جاري تحميل المخزون...
+            </div>
+        }
+        else if (!string.IsNullOrWhiteSpace(_errorMessage))
+        {
+            <div class="state-message error">
+                @_errorMessage
+            </div>
+        }
+        else if (_items.Count == 0)
+        {
+            <div class="empty-inventory">
+                <div class="empty-icon">📦</div>
+
+                <strong>
+                    لا يوجد مخزون مسجل
+                </strong>
+
+                <span>
+                    لا توجد أرصدة حالية للمنتجات.
+                </span>
+            </div>
+        }
+        else
+        {
+            <section class="@GetSummaryGridCss()">
+
+                <article class="summary-card">
+                    <div class="summary-icon">▦</div>
+
+                    <div>
+                        <span>إجمالي القطع</span>
+                        <strong>@TotalUnits</strong>
+                        <small>قطعة بالمخزون</small>
+                    </div>
+                </article>
+
+                <article class="summary-card">
+                    <div class="summary-icon">📦</div>
+
+                    <div>
+                        <span>عدد المنتجات</span>
+                        <strong>@_items.Count</strong>
+                        <small>منتج له رصيد حالي</small>
+                    </div>
+                </article>
+
+                <article class="@GetLowStockSummaryCss()">
+                    <div class="summary-icon">!</div>
+
+                    <div>
+                        <span>مخزون منخفض</span>
+                        <strong>@LowStockCount</strong>
+                        <small>5 قطع أو أقل</small>
+                    </div>
+                </article>
+
+                @if (CanViewFinancialValues)
+                {
+                    <article class="summary-card financial-card">
+                        <div class="summary-icon">💰</div>
+
+                        <div>
+                            <span>قيمة المخزون بالتكلفة</span>
+
+                            <strong>
+                                @TotalCostValue.ToString("0.##") ج
+                            </strong>
+
+                            <small>
+                                قيمة الشراء الحالية
+                            </small>
+                        </div>
+                    </article>
+
+                    <article class="summary-card financial-card">
+                        <div class="summary-icon">🏷️</div>
+
+                        <div>
+                            <span>قيمة المخزون بسعر البيع</span>
+
+                            <strong>
+                                @TotalRetailValue.ToString("0.##") ج
+                            </strong>
+
+                            <small>
+                                قيمة البيع المتوقعة
+                            </small>
+                        </div>
+                    </article>
+                }
+
+            </section>
+
+            <section class="products-section">
+
+                <div class="section-header">
+
+                    <div>
+                        <span class="section-eyebrow">
+                            تفاصيل المخزون
+                        </span>
+
+                        <h2>المنتجات</h2>
+                    </div>
+
+                    <span class="products-count">
+                        @_items.Count منتج
+                    </span>
+
+                </div>
+
+                <div class="inventory-grid">
+
+                    @foreach (var item in _items)
+                    {
+                        <article class="@GetCardCss(item)">
+
+                            <div class="product-image-wrapper">
+
+                                @if (!string.IsNullOrWhiteSpace(item.ImageUrl))
+                                {
+                                    <img class="product-image"
+                                         src="@item.ImageUrl"
+                                         alt="@item.ProductName" />
+                                }
+                                else
+                                {
+                                    <div class="product-image-placeholder">
+                                        <span>🍦</span>
+                                        <small>لا توجد صورة</small>
+                                    </div>
+                                }
+
+                                @if (item.Quantity <= 5)
+                                {
+                                    <span class="low-stock-badge">
+                                        مخزون منخفض
+                                    </span>
+                                }
+
+                            </div>
+
+                            <div class="product-info">
+
+                                <span class="category-name">
+                                    @item.CategoryName
+                                </span>
+
+                                <h3>
+                                    @item.ProductName
+                                </h3>
+
+                                <div class="stock-row">
+
+                                    <span>
+                                        الكمية الحالية
+                                    </span>
+
+                                    <div class="stock-quantity">
+                                        <strong>@item.Quantity</strong>
+                                        <span>قطعة</span>
+                                    </div>
+
+                                </div>
+
+                            </div>
+
+                        </article>
+                    }
+
+                </div>
+
+            </section>
+        }
+
+    </div>
+
+</div>
+
+@code {
+    private const int OutletId = 1;
+
+    private readonly List<StockBalanceDto> _items = new();
+
+    private bool _isLoading = true;
+
+    private string? _errorMessage;
+
+    private string? _role;
+
+    private bool CanViewFinancialValues =>
+        string.Equals(
+            _role,
+            "Admin",
+            StringComparison.OrdinalIgnoreCase)
+        ||
+        string.Equals(
+            _role,
+            "Owner",
+            StringComparison.OrdinalIgnoreCase);
+
+    private decimal TotalCostValue =>
+        _items.Sum(x => x.CostValue);
+
+    private decimal TotalRetailValue =>
+        _items.Sum(x => x.RetailValue);
+
+    private int TotalUnits =>
+        _items.Sum(x => x.Quantity);
+
+    private int LowStockCount =>
+        _items.Count(x => x.Quantity <= 5);
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _isLoading = true;
+            _errorMessage = null;
+
+            var authState =
+                await AuthStateProvider
+                    .GetAuthenticationStateAsync();
+
+            _role =
+                authState.User
+                    .FindFirst(
+                        System.Security.Claims
+                            .ClaimTypes.Role)
+                    ?.Value;
+
+            var result =
+                await InventoryApiService
+                    .GetStockAsync(
+                        OutletId);
+
+            _items.Clear();
+
+            _items.AddRange(
+                result
+                    .OrderBy(x => x.CategoryName)
+                    .ThenBy(x => x.ProductName));
+        }
+        catch
+        {
+            _errorMessage =
+                "تعذر تحميل بيانات المخزون.";
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private string GetCardCss(
+        StockBalanceDto item)
+    {
+        return item.Quantity <= 5
+            ? "inventory-card low-stock"
+            : "inventory-card";
+    }
+
+    private string GetLowStockSummaryCss()
+    {
+        return LowStockCount > 0
+            ? "summary-card warning"
+            : "summary-card";
+    }
+
+    private string GetSummaryGridCss()
+    {
+        return CanViewFinancialValues
+            ? "summary-grid financial-summary"
+            : "summary-grid cashier-summary";
+    }
+
+    private void GoBack()
+    {
+        if (string.Equals(
+                _role,
+                "Cashier",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            Navigation.NavigateTo(
+                "/cashier");
+
+            return;
+        }
+
+        if (string.Equals(
+                _role,
+                "Admin",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            Navigation.NavigateTo(
+                "/admin");
+
+            return;
+        }
+
+        Navigation.NavigateTo(
+            "/dashboard");
+    }
+}

@@ -1,0 +1,499 @@
+﻿@page "/supplier-account"
+
+@using Microsoft.AspNetCore.Authorization
+@using OutletControl.Contracts.SupplierAccount
+@using OutletControl.Web.Services
+
+@attribute [Authorize(Roles = "Admin,Owner")]
+
+@inject SupplierAccountApiService SupplierAccountApiService
+@inject NavigationManager Navigation
+
+<PageTitle>حساب الشركة - Outlet Control</PageTitle>
+
+<div class="supplier-page" dir="rtl">
+
+    <div class="supplier-shell">
+
+        <header class="supplier-header">
+
+            <div>
+                <span class="supplier-eyebrow">
+                    الحسابات
+                </span>
+
+                <h1>حساب الشركة</h1>
+
+                <p>
+                    متابعة قيمة التوريدات والمدفوعات والمديونية الحالية.
+                </p>
+            </div>
+
+            <button type="button"
+                    class="back-btn"
+                    @onclick="GoBack">
+                رجوع
+            </button>
+
+        </header>
+
+        @if (_isLoading)
+        {
+            <div class="state-message">
+                جاري تحميل حساب الشركة...
+            </div>
+        }
+        else if (!string.IsNullOrWhiteSpace(_errorMessage))
+        {
+            <div class="state-message error">
+                @_errorMessage
+            </div>
+        }
+        else if (_ledger is not null)
+        {
+            <section class="summary-grid">
+
+                <article class="summary-card">
+                    <span>إجمالي التوريدات</span>
+
+                    <strong>
+                        @_ledger.TotalReceived.ToString("0.##") ج
+                    </strong>
+
+                    <small>
+                        إجمالي قيمة البضاعة المستلمة
+                    </small>
+                </article>
+
+                <article class="summary-card">
+                    <span>إجمالي المدفوع</span>
+
+                    <strong>
+                        @_ledger.TotalPaid.ToString("0.##") ج
+                    </strong>
+
+                    <small>
+                        إجمالي الدفعات المسجلة
+                    </small>
+                </article>
+
+                <article class="summary-card debt-card">
+                    <span>المديونية الحالية</span>
+
+                    <strong class="@GetDebtCss()">
+                        @_ledger.CurrentDebt.ToString("0.##") ج
+                    </strong>
+
+                    <small>
+                        التوريدات ناقص المدفوعات
+                    </small>
+                </article>
+
+            </section>
+
+            <section class="payment-card">
+
+                <div class="section-heading">
+                    <div>
+                        <span>تسجيل حركة</span>
+                        <h2>إضافة دفعة للشركة</h2>
+                    </div>
+                </div>
+
+                <div class="payment-form">
+
+                    <div class="form-group">
+                        <label>قيمة الدفعة</label>
+
+                        <div class="money-input">
+
+                            <input type="number"
+                                   min="0.01"
+                                   step="0.01"
+                                   @bind="_paymentAmount" />
+
+                            <span>ج</span>
+
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>ملاحظات</label>
+
+                        <input type="text"
+                               @bind="_paymentNotes"
+                               placeholder="اختياري" />
+                    </div>
+
+                    <button type="button"
+                            class="payment-btn"
+                            disabled="@_isSubmittingPayment"
+                            @onclick="AddPaymentAsync">
+
+                        @(_isSubmittingPayment
+                            ? "جاري التسجيل..."
+                            : "تسجيل الدفعة")
+
+                    </button>
+
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(_paymentMessage))
+                {
+                    <div class="@GetPaymentMessageCss()">
+                        @_paymentMessage
+                    </div>
+                }
+
+            </section>
+
+            <section class="ledger-section">
+
+                <div class="section-heading ledger-heading">
+
+                    <div>
+                        <span>كشف الحساب</span>
+                        <h2>الحركات</h2>
+                    </div>
+
+                    <div class="filters">
+
+                        <div>
+                            <label>من</label>
+                            <input type="date"
+                                   @bind="_fromDate" />
+                        </div>
+
+                        <div>
+                            <label>إلى</label>
+                            <input type="date"
+                                   @bind="_toDate" />
+                        </div>
+
+                        <button type="button"
+                                class="filter-btn"
+                                disabled="@_isLoadingLedger"
+                                @onclick="LoadLedgerAsync">
+                            تطبيق
+                        </button>
+
+                    </div>
+
+                </div>
+
+                @if (_isLoadingLedger)
+                {
+                    <div class="ledger-state">
+                        جاري تحميل الحركات...
+                    </div>
+                }
+                else if (_ledger.Movements.Count == 0)
+                {
+                    <div class="empty-ledger">
+                        <div>💳</div>
+                        <strong>لا توجد حركات</strong>
+                        <span>لا توجد حركات خلال الفترة المحددة.</span>
+                    </div>
+                }
+                else
+                {
+                    <div class="ledger-table-wrapper">
+
+                        <table class="ledger-table">
+
+                            <thead>
+                                <tr>
+                                    <th>التاريخ</th>
+                                    <th>الحركة</th>
+                                    <th>المرجع</th>
+                                    <th>القيمة</th>
+                                    <th>الرصيد بعد الحركة</th>
+                                    <th>ملاحظات</th>
+                                </tr>
+                            </thead>
+
+                            <tbody>
+
+                                @foreach (var movement in _ledger.Movements)
+                                {
+                                    <tr>
+
+                                        <td class="date-cell">
+                                            @FormatDateTime(movement.OccurredAt)
+                                        </td>
+
+                                        <td>
+                                            <span class="@GetMovementBadgeCss(movement)">
+                                                @GetMovementText(movement)
+                                            </span>
+                                        </td>
+
+                                        <td>
+                                            @(string.IsNullOrWhiteSpace(
+                                                movement.ReferenceNumber)
+                                                ? "—"
+                                                : movement.ReferenceNumber)
+                                        </td>
+
+                                        <td class="@GetAmountCss(movement)">
+                                            @GetSignedAmount(movement)
+                                        </td>
+
+                                        <td class="balance-cell">
+                                            @movement.BalanceAfter.ToString("0.##") ج
+                                        </td>
+
+                                        <td>
+                                            @(string.IsNullOrWhiteSpace(
+                                                movement.Notes)
+                                                ? "—"
+                                                : movement.Notes)
+                                        </td>
+
+                                    </tr>
+                                }
+
+                            </tbody>
+
+                        </table>
+
+                    </div>
+                }
+
+            </section>
+        }
+
+    </div>
+
+</div>
+
+@code {
+    private const int OutletId = 1;
+
+    private SupplierAccountLedgerDto? _ledger;
+
+    private DateTime? _fromDate =
+        DateTime.Today.AddDays(-29);
+
+    private DateTime? _toDate =
+        DateTime.Today;
+
+    private decimal _paymentAmount;
+
+    private string? _paymentNotes;
+
+    private bool _isLoading = true;
+
+    private bool _isLoadingLedger;
+
+    private bool _isSubmittingPayment;
+
+    private bool _paymentSucceeded;
+
+    private string? _errorMessage;
+
+    private string? _paymentMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadPageAsync();
+    }
+
+    private async Task LoadPageAsync()
+    {
+        try
+        {
+            _isLoading = true;
+            _errorMessage = null;
+
+            await LoadLedgerCoreAsync();
+        }
+        catch (Exception ex)
+        {
+            _errorMessage =
+                ex.Message;
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task LoadLedgerAsync()
+    {
+        try
+        {
+            _isLoadingLedger = true;
+            _errorMessage = null;
+
+            await LoadLedgerCoreAsync();
+        }
+        catch (Exception ex)
+        {
+            _errorMessage =
+                ex.Message;
+        }
+        finally
+        {
+            _isLoadingLedger = false;
+        }
+    }
+
+    private async Task LoadLedgerCoreAsync()
+    {
+        DateTime? fromUtc = null;
+        DateTime? toUtcExclusive = null;
+
+        if (_fromDate.HasValue)
+        {
+            var localStart =
+                DateTime.SpecifyKind(
+                    _fromDate.Value.Date,
+                    DateTimeKind.Local);
+
+            fromUtc =
+                localStart.ToUniversalTime();
+        }
+
+        if (_toDate.HasValue)
+        {
+            var localEndExclusive =
+                DateTime.SpecifyKind(
+                    _toDate.Value.Date.AddDays(1),
+                    DateTimeKind.Local);
+
+            toUtcExclusive =
+                localEndExclusive.ToUniversalTime();
+        }
+
+        _ledger =
+            await SupplierAccountApiService
+                .GetLedgerAsync(
+                    OutletId,
+                    fromUtc,
+                    toUtcExclusive);
+    }
+
+    private async Task AddPaymentAsync()
+    {
+        if (_paymentAmount <= 0)
+        {
+            _paymentSucceeded = false;
+            _paymentMessage =
+                "أدخل قيمة دفعة أكبر من صفر.";
+
+            return;
+        }
+
+        try
+        {
+            _isSubmittingPayment = true;
+            _paymentMessage = null;
+            _paymentSucceeded = false;
+
+            var result =
+                await SupplierAccountApiService
+                    .AddPaymentAsync(
+                        new CreateSupplierPaymentRequest
+                        {
+                            OutletId = OutletId,
+                            Amount = _paymentAmount,
+                            Notes = _paymentNotes
+                        });
+
+            if (result is null)
+            {
+                _paymentMessage =
+                    "تعذر تسجيل الدفعة.";
+
+                return;
+            }
+
+            _paymentSucceeded = true;
+            _paymentMessage =
+                "تم تسجيل الدفعة بنجاح.";
+
+            _paymentAmount = 0;
+            _paymentNotes = null;
+
+            await LoadLedgerCoreAsync();
+        }
+        catch (Exception ex)
+        {
+            _paymentSucceeded = false;
+            _paymentMessage =
+                ex.Message;
+        }
+        finally
+        {
+            _isSubmittingPayment = false;
+        }
+    }
+
+    private string GetDebtCss()
+    {
+        if (_ledger is null)
+            return "debt-value";
+
+        return _ledger.CurrentDebt > 0
+            ? "debt-value positive-debt"
+            : "debt-value settled";
+    }
+
+    private string GetPaymentMessageCss()
+    {
+        return _paymentSucceeded
+            ? "payment-message success"
+            : "payment-message error";
+    }
+
+    private static string GetMovementText(
+        SupplierAccountMovementDto movement)
+    {
+        return movement.Type ==
+            SupplierAccountMovementType.Receiving
+                ? "استلام بضاعة"
+                : "دفعة";
+    }
+
+    private static string GetMovementBadgeCss(
+        SupplierAccountMovementDto movement)
+    {
+        return movement.Type ==
+            SupplierAccountMovementType.Receiving
+                ? "movement-badge receiving"
+                : "movement-badge payment";
+    }
+
+    private static string GetAmountCss(
+        SupplierAccountMovementDto movement)
+    {
+        return movement.Type ==
+            SupplierAccountMovementType.Receiving
+                ? "amount receiving"
+                : "amount payment";
+    }
+
+    private static string GetSignedAmount(
+        SupplierAccountMovementDto movement)
+    {
+        return movement.Type ==
+            SupplierAccountMovementType.Receiving
+                ? $"+{movement.Amount:0.##} ج"
+                : $"-{movement.Amount:0.##} ج";
+    }
+
+    private static string FormatDateTime(
+        DateTime value)
+    {
+        return value
+            .ToLocalTime()
+            .ToString("dd/MM/yyyy - hh:mm tt");
+    }
+
+    private void GoBack()
+    {
+        Navigation.NavigateTo(
+            "/dashboard");
+    }
+}

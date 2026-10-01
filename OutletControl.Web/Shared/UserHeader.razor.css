@@ -1,0 +1,236 @@
+﻿.user-header {
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+    min-height: 78px;
+    padding: 12px 26px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    background: rgba(255, 255, 255, 0.96);
+    border-bottom: 1px solid #eee7e4;
+    box-shadow: 0 4px 18px rgba(62, 27, 23, 0.05);
+    backdrop-filter: blur(12px);
+}
+
+
+/* =========================
+   Branding
+   ========================= */
+
+.header-brand {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    min-width: 0;
+}
+
+.friday-mark {
+    width: 46px;
+    height: 46px;
+    flex: 0 0 46px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 14px;
+    background: linear-gradient( 135deg, #e52b22, #b90e18 );
+    color: #fff5db;
+    font-family: Georgia, serif;
+    font-size: 25px;
+    font-style: italic;
+    font-weight: 900;
+    box-shadow: 0 7px 16px rgba(205, 24, 25, 0.18);
+}
+
+.brand-details {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.brand-top-line {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    min-width: 0;
+}
+
+.company-name {
+    color: #c8161e;
+    font-size: 16px;
+    font-weight: 950;
+    white-space: nowrap;
+}
+
+.brand-separator {
+    width: 1px;
+    height: 16px;
+    background: #ddd0ca;
+}
+
+.system-name {
+    color: #8c716d;
+    font-size: 12px;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.outlet-details {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    color: #806763;
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+    .outlet-details strong {
+        color: #3e1a17;
+        font-size: 13px;
+        font-weight: 900;
+    }
+
+.details-dot {
+    color: #e52b22;
+}
+
+
+/* =========================
+   User
+   ========================= */
+
+.header-user {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+}
+
+.user-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.user-avatar {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: #fff0ed;
+    color: #c8171f;
+    font-size: 15px;
+    font-weight: 950;
+}
+
+.user-details {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+    .user-details strong {
+        color: #30201e;
+        font-size: 13px;
+        font-weight: 900;
+        white-space: nowrap;
+    }
+
+    .user-details span {
+        color: #9a8581;
+        font-size: 11px;
+        font-weight: 700;
+    }
+
+
+/* =========================
+   Logout
+   ========================= */
+
+.logout-btn {
+    min-height: 42px;
+    padding: 0 15px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    border: 1px solid #f0d5d2;
+    border-radius: 11px;
+    background: #fff8f6;
+    color: #c51a20;
+    font-size: 12px;
+    font-weight: 900;
+    cursor: pointer;
+    transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+}
+
+    .logout-btn:hover {
+        background: #fff0ed;
+        border-color: #e8bcb8;
+        transform: translateY(-1px);
+    }
+
+.logout-icon {
+    font-size: 16px;
+}
+
+
+/* =========================
+   Responsive
+   ========================= */
+
+@media (max-width: 750px) {
+
+    .user-header {
+        padding: 10px 14px;
+    }
+
+    .system-name,
+    .details-dot,
+    .outlet-details span:not(.details-dot) {
+        display: none;
+    }
+
+    .brand-separator {
+        display: none;
+    }
+
+    .user-details {
+        display: none;
+    }
+
+    .logout-btn span:not(.logout-icon) {
+        display: none;
+    }
+
+    .logout-btn {
+        width: 42px;
+        padding: 0;
+    }
+}
+
+@media (max-width: 480px) {
+
+    .friday-mark {
+        width: 40px;
+        height: 40px;
+        flex-basis: 40px;
+        border-radius: 12px;
+        font-size: 21px;
+    }
+
+    .company-name {
+        font-size: 13px;
+    }
+
+    .outlet-details strong {
+        font-size: 11px;
+    }
+
+    .user-avatar {
+        display: none;
+    }
+}

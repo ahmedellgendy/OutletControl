@@ -1,0 +1,540 @@
+﻿@page "/receiving"
+
+@using OutletControl.Contracts.Catalog
+@using OutletControl.Contracts.Receiving
+@using OutletControl.Web.Services
+@using Microsoft.AspNetCore.Authorization
+
+@attribute [Authorize(Roles = "Owner,Cashier,Admin")]
+
+@inject CatalogApiService CatalogApiService
+@inject ReceivingApiService ReceivingApiService
+@inject NavigationManager Navigation
+
+<PageTitle>استلام بضاعة - Outlet Control</PageTitle>
+
+<div class="receiving-page" dir="rtl">
+
+    <div class="receiving-container">
+
+        <header class="receiving-header">
+
+            <div class="receiving-title">
+                <span class="receiving-eyebrow">المخزون</span>
+                <h1>استلام بضاعة</h1>
+                <p>اختر التصنيف ثم أضف المنتجات والكميات الواردة</p>
+            </div>
+
+            <button type="button"
+                    class="back-btn"
+                    @onclick="GoHome">
+                رجوع
+            </button>
+
+        </header>
+
+        @if (_isLoading)
+        {
+            <div class="state-message">
+                جاري تحميل المنتجات...
+            </div>
+        }
+        else if (!string.IsNullOrWhiteSpace(_errorMessage))
+        {
+            <div class="message error page-message">
+                @_errorMessage
+            </div>
+        }
+        else
+        {
+            <div class="receiving-layout">
+
+                <aside class="categories-panel">
+
+                    <div class="categories-header">
+                        <span class="categories-eyebrow">التصنيفات</span>
+                        <h2>اختر التصنيف</h2>
+                    </div>
+
+                    <div class="category-list">
+
+                        @foreach (var category in _categories)
+                        {
+                            <button type="button"
+                                    class="@GetCategoryCss(category.Id)"
+                                    @onclick="() => SelectCategoryAsync(category.Id)">
+                                @category.Name
+                            </button>
+                        }
+
+                    </div>
+
+                </aside>
+
+                <main class="products-section">
+
+                    <div class="products-section-header">
+                        <div>
+                            <span class="section-eyebrow">المنتجات</span>
+                            <h2>اختر المنتجات المستلمة</h2>
+                        </div>
+
+                        @if (_products.Count > 0)
+                        {
+                            <span class="products-count">
+                                @_products.Count منتج
+                            </span>
+                        }
+                    </div>
+
+                    @if (_products.Count == 0)
+                    {
+                        <div class="empty-products">
+                            <div class="empty-products-icon">📦</div>
+                            <strong>لا توجد منتجات</strong>
+                            <span>لا توجد منتجات مضافة لهذا التصنيف حاليًا.</span>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="products-grid">
+
+                            @foreach (var product in _products)
+                            {
+                                <button type="button"
+                                        class="product-card"
+                                        @onclick="() => AddProduct(product)">
+
+                                    <div class="product-image-wrapper">
+
+                                        @if (!string.IsNullOrWhiteSpace(product.ImageUrl))
+                                        {
+                                            <img class="product-image"
+                                                 src="@product.ImageUrl"
+                                                 alt="@product.Name" />
+                                        }
+                                        else
+                                        {
+                                            <div class="product-image-placeholder">
+                                                🍦
+                                            </div>
+                                        }
+
+                                    </div>
+
+                                    <div class="product-card-content">
+
+                                        <div class="product-name">
+                                            @product.Name
+                                        </div>
+
+                                        <div class="product-card-action">
+                                            إضافة للاستلام
+                                        </div>
+
+                                    </div>
+
+                                </button>
+                            }
+
+                        </div>
+                    }
+
+                </main>
+
+                <aside class="receipt-panel">
+
+                    <div class="receipt-header">
+                        <div>
+                            <span class="receipt-label">الاستلام الحالي</span>
+                            <h2>البضاعة المستلمة</h2>
+                        </div>
+
+                        @if (_items.Count > 0)
+                        {
+                            <span class="receipt-count">
+                                @_items.Sum(x => x.Quantity) قطعة
+                            </span>
+                        }
+                    </div>
+
+                    <div class="receipt-content">
+
+                        @if (_items.Count == 0)
+                        {
+                            <div class="empty-state">
+
+                                <div class="empty-state-icon">
+                                    📥
+                                </div>
+
+                                <strong>لم تتم إضافة منتجات</strong>
+
+                                <span>
+                                    اختر المنتجات من المنتصف لإضافتها إلى الاستلام
+                                </span>
+
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="receipt-items">
+
+                                @foreach (var item in _items)
+                                {
+                                    <div class="receipt-item">
+
+                                        <div class="receipt-item-heading">
+
+                                            <div class="item-product">
+
+                                                @if (!string.IsNullOrWhiteSpace(item.Product.ImageUrl))
+                                                {
+                                                    <img src="@item.Product.ImageUrl"
+                                                         alt="@item.Product.Name" />
+                                                }
+                                                else
+                                                {
+                                                    <div class="item-product-placeholder">
+                                                        🍦
+                                                    </div>
+                                                }
+
+                                                <div>
+                                                    <div class="item-name">
+                                                        @item.Product.Name
+                                                    </div>
+
+                                                    <span>
+                                                        إجمالي الصنف:
+                                                        <strong>@item.Total.ToString("0.##") ج</strong>
+                                                    </span>
+                                                </div>
+
+                                            </div>
+
+                                            <button type="button"
+                                                    class="remove-btn"
+                                                    title="حذف الصنف"
+                                                    @onclick="() => RemoveItem(item)">
+                                                ×
+                                            </button>
+
+                                        </div>
+
+                                        <div class="item-fields">
+
+                                            <div>
+                                                <label>الكمية</label>
+
+                                                <input type="number"
+                                                       min="1"
+                                                       @bind="item.Quantity"
+                                                       @bind:after="ResetReceivingForChange" />
+                                            </div>
+
+                                            <div>
+                                                <label>تكلفة القطعة</label>
+
+                                                <div class="money-input">
+                                                    <input type="number"
+                                                           min="0"
+                                                           step="0.01"
+                                                           @bind="item.UnitCost"
+                                                           @bind:after="ResetReceivingForChange" />
+                                                    <span>ج</span>
+                                                </div>
+                                            </div>
+
+                                        </div>
+
+                                    </div>
+                                }
+
+                            </div>
+                        }
+
+                    </div>
+
+                    <div class="receipt-footer">
+
+                        @if (!string.IsNullOrWhiteSpace(_message))
+                        {
+                            <div class="@GetMessageCss()">
+                                @_message
+                            </div>
+                        }
+
+                        <div class="receipt-total">
+                            <span>إجمالي التوريد</span>
+
+                            <strong>
+                                @TotalAmount.ToString("0.##") ج
+                            </strong>
+                        </div>
+
+                        <div class="reference-group">
+                            <label>رقم الفاتورة / المرجع</label>
+
+                            <input type="text"
+                                   @bind="_referenceNumber"
+                                   @bind:after="ResetReceivingForChange"
+                                   placeholder="اختياري" />
+                        </div>
+
+                        <button type="button"
+                                class="confirm-btn"
+                                disabled="@(_items.Count == 0 || _isSubmitting)"
+                                @onclick="ConfirmReceivingAsync">
+
+                            @if (_isSubmitting)
+                            {
+                                <span>جاري حفظ الاستلام...</span>
+                            }
+                            else
+                            {
+                                <span>تأكيد استلام البضاعة</span>
+                            }
+
+                        </button>
+
+                    </div>
+
+                </aside>
+
+            </div>
+        }
+
+    </div>
+
+</div>
+
+@code {
+    private const int OutletId = 1;
+
+    private readonly List<CategoryDto> _categories = new();
+    private readonly List<ProductDto> _products = new();
+    private readonly List<ReceivingItemModel> _items = new();
+
+    private int? _selectedCategoryId;
+
+    private bool _isLoading = true;
+    private bool _isSubmitting;
+
+    private string? _referenceNumber;
+    private string? _errorMessage;
+    private string? _message;
+    private bool _success;
+    private string? _receivingClientReferenceId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var categories =
+                await CatalogApiService.GetCategoriesAsync();
+
+            _categories.AddRange(
+                categories
+                    .Where(x => x.IsActive)
+                    .OrderBy(x => x.DisplayOrder));
+
+            if (_categories.Count > 0)
+            {
+                await SelectCategoryAsync(
+                    _categories[0].Id);
+            }
+        }
+        catch
+        {
+            _errorMessage =
+                "تعذر تحميل بيانات المنتجات.";
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task SelectCategoryAsync(int categoryId)
+    {
+        _selectedCategoryId = categoryId;
+
+        var products =
+            await CatalogApiService
+                .GetProductsByCategoryAsync(categoryId);
+
+        _products.Clear();
+
+        _products.AddRange(
+            products
+                .Where(x => x.IsActive)
+                .OrderBy(x => x.DisplayOrder));
+    }
+
+    private string GetCategoryCss(int categoryId)
+    {
+        return _selectedCategoryId == categoryId
+            ? "category-card active"
+            : "category-card";
+    }
+
+    private void AddProduct(ProductDto product)
+    {
+        ResetMessage();
+
+        var existing =
+            _items.FirstOrDefault(
+                x => x.Product.Id == product.Id);
+
+        if (existing is not null)
+        {
+            existing.Quantity++;
+            return;
+        }
+
+        _items.Add(new ReceivingItemModel
+        {
+            Product = product,
+            Quantity = 1,
+            UnitCost = 0
+        });
+    }
+
+    private void RemoveItem(ReceivingItemModel item)
+    {
+        _items.Remove(item);
+        ResetMessage();
+    }
+
+    private void ResetMessage()
+    {
+        ResetReceivingForChange();
+    }
+
+    private void ResetReceivingForChange()
+    {
+        _message = null;
+        _success = false;
+        _receivingClientReferenceId = null;
+    }
+
+    private async Task ConfirmReceivingAsync()
+    {
+        if (_isSubmitting)
+            return;
+
+        try
+        {
+            _isSubmitting = true;
+            _message = null;
+            _success = false;
+
+            if (_items.Any(x => x.Quantity <= 0))
+            {
+                _message =
+                    "راجع كميات المنتجات.";
+                return;
+            }
+
+            if (_items.Any(x => x.UnitCost < 0))
+            {
+                _message =
+                    "تكلفة المنتج لا يمكن أن تكون أقل من صفر.";
+                return;
+            }
+
+            // نفس الرقم يفضل موجود لو حصل timeout أو retry لنفس الاستلام.
+            _receivingClientReferenceId ??=
+                Guid.NewGuid().ToString("N");
+
+            var request = new ReceiveStockRequest
+            {
+                OutletId = OutletId,
+                ClientReferenceId = _receivingClientReferenceId,
+                ReferenceNumber = _referenceNumber,
+
+                Items = _items
+                    .Select(x => new ReceiveStockItemRequest
+                    {
+                        ProductId = x.Product.Id,
+                        Quantity = x.Quantity,
+                        UnitCost = x.UnitCost
+                    })
+                    .ToList()
+            };
+
+            var result =
+                await ReceivingApiService.ReceiveAsync(request);
+
+            if (result is null)
+            {
+                _message =
+                    "تعذر تسجيل الاستلام.";
+                return;
+            }
+
+            _success = true;
+
+            _message =
+                $"تم استلام البضاعة بنجاح بقيمة {result.TotalAmount:0.##} ج";
+
+            _items.Clear();
+            _referenceNumber = null;
+            _receivingClientReferenceId = null;
+        }
+        catch (Exception ex)
+        {
+            _success = false;
+
+            // لا نمسح ClientReferenceId هنا حتى retry لنفس العملية
+            // لا ينشئ استلامًا جديدًا.
+            _message = GetReadableErrorMessage(ex.Message);
+        }
+        finally
+        {
+            _isSubmitting = false;
+        }
+    }
+
+    private static string GetReadableErrorMessage(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+            return "تعذر تسجيل استلام البضاعة.";
+
+        if (message.Contains("تم تعديل رصيد"))
+            return "تم تحديث المخزون أثناء الاستلام. حاول مرة أخرى.";
+
+        if (message.Contains("تعارض"))
+            return "حدث تعارض أثناء تسجيل الاستلام. حاول مرة أخرى.";
+
+        return message;
+    }
+
+    private string GetMessageCss()
+    {
+        return _success
+            ? "message success"
+            : "message error";
+    }
+
+    private decimal TotalAmount =>
+        _items.Sum(x => x.Total);
+
+    private void GoHome()
+    {
+        Navigation.NavigateTo("/");
+    }
+
+    private sealed class ReceivingItemModel
+    {
+        public ProductDto Product { get; set; } = default!;
+
+        public int Quantity { get; set; }
+
+        public decimal UnitCost { get; set; }
+
+        public decimal Total =>
+            Quantity * UnitCost;
+    }
+}

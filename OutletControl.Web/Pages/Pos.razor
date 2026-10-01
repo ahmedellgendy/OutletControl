@@ -1,0 +1,521 @@
+﻿@page "/pos"
+
+@using OutletControl.Contracts.Catalog
+@using OutletControl.Contracts.Sales
+@using OutletControl.Web.Services
+@using Microsoft.AspNetCore.Authorization
+
+@attribute [Authorize(Roles = "Owner,Cashier,Admin")]
+
+@inject CatalogApiService CatalogApiService
+@inject SalesApiService SalesApiService
+@inject NavigationManager Navigation
+
+<PageTitle>البيع - Outlet Control</PageTitle>
+
+<div class="pos-page" dir="rtl">
+
+    <aside class="pos-cart">
+
+        <div class="cart-header">
+
+            <div>
+                <span class="cart-label">الطلب الحالي</span>
+                <h2>@CartItemsCount قطعة</h2>
+            </div>
+
+            @if (_cart.Count > 0)
+            {
+                <button type="button" class="clear-cart-btn"
+                        @onclick="ClearCart">
+                    مسح الطلب
+                </button>
+            }
+
+        </div>
+
+        <div class="cart-content">
+
+            @if (_cart.Count == 0)
+            {
+                <div class="cart-empty">
+
+                    <div class="cart-empty-icon">
+                        🛒
+                    </div>
+
+                    <strong>السلة فارغة</strong>
+
+                    <span>
+                        اضغط على أي منتج لإضافته
+                    </span>
+
+                </div>
+            }
+            else
+            {
+                <div class="cart-items">
+
+                    @foreach (var item in _cart)
+                    {
+                        <div class="cart-item">
+
+                            <div class="cart-item-top">
+
+                                <div class="cart-product">
+
+                                    @if (!string.IsNullOrWhiteSpace(item.Product.ImageUrl))
+                                    {
+                                        <img src="@item.Product.ImageUrl"
+                                             alt="@item.Product.Name" />
+                                    }
+                                    else
+                                    {
+                                        <div class="cart-product-placeholder">
+                                            🍦
+                                        </div>
+                                    }
+
+                                    <div>
+                                        <strong>@item.Product.Name</strong>
+                                        <span>@item.Product.SellingPrice.ToString("0.##") ج</span>
+                                    </div>
+
+                                </div>
+
+                                <div class="cart-item-total">
+                                    @item.Total.ToString("0.##") ج
+                                </div>
+
+                            </div>
+
+                            <div class="cart-item-actions">
+
+                                <button type="button" class="qty-btn"
+                                        @onclick="() => DecreaseQuantity(item)">
+                                    −
+                                </button>
+
+                                <strong class="qty-value">
+                                    @item.Quantity
+                                </strong>
+
+                                <button type="button" class="qty-btn"
+                                        @onclick="() => IncreaseQuantity(item)">
+                                    +
+                                </button>
+
+                            </div>
+
+                        </div>
+                    }
+
+                </div>
+            }
+
+        </div>
+
+        <div class="cart-footer">
+
+            @if (!string.IsNullOrWhiteSpace(_saleMessage))
+            {
+                <div class="@GetSaleMessageCss()">
+                    @_saleMessage
+                </div>
+            }
+
+            <div class="cart-summary">
+                <span>الإجمالي</span>
+                <strong>@CartTotal.ToString("0.##") ج</strong>
+            </div>
+
+            <button type="button" class="confirm-sale-btn"
+                    disabled="@(_cart.Count == 0 || _isSubmittingSale)"
+                    @onclick="ConfirmSaleAsync">
+
+                @if (_isSubmittingSale)
+                {
+                    <span>جاري تسجيل البيع...</span>
+                }
+                else
+                {
+                    <span>تأكيد البيع</span>
+                }
+
+            </button>
+
+        </div>
+
+    </aside>
+
+    <aside class="pos-categories">
+
+        <div class="categories-header">
+            <span class="categories-eyebrow">التصنيفات</span>
+            <h3>اختر التصنيف</h3>
+        </div>
+
+        @if (_isLoadingCategories)
+        {
+            <div class="categories-state">
+                جاري التحميل...
+            </div>
+        }
+        else if (!string.IsNullOrWhiteSpace(_errorMessage))
+        {
+            <div class="categories-state error">
+                @_errorMessage
+            </div>
+        }
+        else
+        {
+            <div class="category-list-vertical">
+
+                @foreach (var category in _categories)
+                {
+                    <button type="button" class="@GetCategoryCss(category.Id)"
+                            @onclick="() => SelectCategoryAsync(category.Id)">
+                        @category.Name
+                    </button>
+                }
+
+            </div>
+        }
+
+    </aside>
+
+    <main class="pos-products">
+
+        <div class="pos-header">
+
+            <div class="pos-title">
+                <span class="pos-eyebrow">نقطة البيع</span>
+                <h1>اختر المنتجات</h1>
+                <p>اختر التصنيف من اليمين ثم اضغط على المنتج لإضافته للطلب</p>
+            </div>
+
+            <button type="button" class="back-btn"
+                    @onclick="GoHome">
+                رجوع
+            </button>
+
+        </div>
+
+        @if (_isLoadingProducts)
+        {
+            <div class="state-message">
+                جاري تحميل المنتجات...
+            </div>
+        }
+        else if (_products.Count == 0)
+        {
+            <div class="empty-products">
+
+                <div class="empty-products-icon">
+                    📦
+                </div>
+
+                <strong>لا توجد منتجات</strong>
+
+                <span>
+                    لا توجد منتجات مضافة لهذا التصنيف حاليًا.
+                </span>
+
+            </div>
+        }
+        else
+        {
+            <div class="products-grid">
+
+                @foreach (var product in _products)
+                {
+                    <button type="button" class="product-card"
+                            @onclick="() => AddToCart(product)">
+
+                        <div class="product-image-wrapper">
+
+                            @if (!string.IsNullOrWhiteSpace(product.ImageUrl))
+                            {
+                                <img class="product-image"
+                                     src="@product.ImageUrl"
+                                     alt="@product.Name" />
+                            }
+                            else
+                            {
+                                <div class="product-image-placeholder">
+                                    🍦
+                                </div>
+                            }
+
+                        </div>
+
+                        <div class="product-card-content">
+
+                            <div class="product-name">
+                                @product.Name
+                            </div>
+
+                            <div class="product-price">
+                                @product.SellingPrice.ToString("0.##")
+                                <span>ج</span>
+                            </div>
+
+                        </div>
+
+                    </button>
+                }
+
+            </div>
+        }
+
+    </main>
+
+</div>
+
+@code {
+    private readonly List<CategoryDto> _categories = new();
+    private readonly List<ProductDto> _products = new();
+    private readonly List<CartItem> _cart = new();
+
+    private int? _selectedCategoryId;
+
+    private bool _isLoadingCategories;
+    private bool _isLoadingProducts;
+    private bool _isSubmittingSale;
+
+    private string? _errorMessage;
+    private string? _saleMessage;
+    private bool _saleSucceeded;
+    private string? _saleClientReferenceId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadCategoriesAsync();
+    }
+
+    private async Task LoadCategoriesAsync()
+    {
+        try
+        {
+            _isLoadingCategories = true;
+            _errorMessage = null;
+
+            var categories = await CatalogApiService.GetCategoriesAsync();
+
+            _categories.Clear();
+
+            _categories.AddRange(
+                categories
+                    .Where(x => x.IsActive)
+                    .OrderBy(x => x.DisplayOrder));
+
+            if (_categories.Count > 0)
+            {
+                await SelectCategoryAsync(_categories[0].Id);
+            }
+        }
+        catch
+        {
+            _errorMessage = "تعذر تحميل التصنيفات.";
+        }
+        finally
+        {
+            _isLoadingCategories = false;
+        }
+    }
+
+    private async Task SelectCategoryAsync(int categoryId)
+    {
+        try
+        {
+            _selectedCategoryId = categoryId;
+            _isLoadingProducts = true;
+            _errorMessage = null;
+
+            var products =
+                await CatalogApiService.GetProductsByCategoryAsync(categoryId);
+
+            _products.Clear();
+
+            _products.AddRange(
+                products
+                    .Where(x => x.IsActive)
+                    .OrderBy(x => x.DisplayOrder));
+        }
+        catch
+        {
+            _errorMessage = "تعذر تحميل المنتجات.";
+        }
+        finally
+        {
+            _isLoadingProducts = false;
+        }
+    }
+
+    private string GetCategoryCss(int categoryId)
+    {
+        return _selectedCategoryId == categoryId
+            ? "category-card active"
+            : "category-card";
+    }
+
+    private void AddToCart(ProductDto product)
+    {
+        ResetSaleMessage();
+
+        var existingItem = _cart.FirstOrDefault(x => x.Product.Id == product.Id);
+
+        if (existingItem is null)
+        {
+            _cart.Add(new CartItem
+            {
+                Product = product,
+                Quantity = 1
+            });
+
+            return;
+        }
+
+        existingItem.Quantity++;
+    }
+
+    private void IncreaseQuantity(CartItem item)
+    {
+        ResetSaleMessage();
+        item.Quantity++;
+    }
+
+    private void DecreaseQuantity(CartItem item)
+    {
+        ResetSaleMessage();
+        item.Quantity--;
+
+        if (item.Quantity <= 0)
+        {
+            _cart.Remove(item);
+        }
+    }
+
+    private void ClearCart()
+    {
+        _cart.Clear();
+        ResetSaleMessage();
+    }
+
+    private void ResetSaleMessage()
+    {
+        _saleMessage = null;
+        _saleSucceeded = false;
+        _saleClientReferenceId = null;
+    }
+
+    private decimal CartTotal =>
+        _cart.Sum(x => x.Total);
+
+    private int CartItemsCount =>
+        _cart.Sum(x => x.Quantity);
+
+    private async Task ConfirmSaleAsync()
+    {
+        if (_cart.Count == 0 || _isSubmittingSale)
+            return;
+
+        // نفس الرقم يفضل موجود لو حصل timeout أو retry لنفس الطلب.
+        _saleClientReferenceId ??=
+            Guid.NewGuid().ToString("N");
+
+        try
+        {
+            _isSubmittingSale = true;
+            _saleMessage = null;
+            _saleSucceeded = false;
+
+            var request = new CreateSaleRequest
+            {
+                OutletId = 1,
+                ClientReferenceId = _saleClientReferenceId,
+
+                Items = _cart
+                    .Select(x => new CreateSaleItemRequest
+                    {
+                        ProductId = x.Product.Id,
+                        Quantity = x.Quantity
+                    })
+                    .ToList()
+            };
+
+            var result =
+                await SalesApiService.CreateSaleAsync(request);
+
+            if (result is null)
+            {
+                _saleMessage = "تعذر تسجيل عملية البيع.";
+                return;
+            }
+
+            _saleSucceeded = true;
+            _saleMessage = $"تم البيع بنجاح - الإجمالي {result.TotalAmount:0.##} ج";
+
+            _cart.Clear();
+            _saleClientReferenceId = null;
+
+            if (_selectedCategoryId.HasValue)
+            {
+                await SelectCategoryAsync(_selectedCategoryId.Value);
+            }
+        }
+        catch (Exception ex)
+        {
+            _saleSucceeded = false;
+
+            // لا نمسح ClientReferenceId هنا حتى الـ retry لنفس السلة
+            // لا ينشئ عملية بيع جديدة.
+            _saleMessage = GetReadableErrorMessage(ex.Message);
+        }
+        finally
+        {
+            _isSubmittingSale = false;
+        }
+    }
+
+    private string GetSaleMessageCss()
+    {
+        return _saleSucceeded
+            ? "sale-message success"
+            : "sale-message error";
+    }
+
+    private static string GetReadableErrorMessage(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+            return "حدث خطأ أثناء تسجيل البيع.";
+
+        if (message.Contains("يجب فتح اليوم"))
+            return "يجب فتح اليوم قبل بدء البيع.";
+
+        if (message.Contains("غير كافية"))
+            return "الكمية المطلوبة غير متوفرة في المخزون.";
+
+        if (message.Contains("تم تعديل رصيد"))
+            return "تم تحديث المخزون أثناء البيع. حاول مرة أخرى.";
+
+        if (message.Contains("تعارض"))
+            return "حدث تعارض أثناء تسجيل البيع. حاول مرة أخرى.";
+
+        return message;
+    }
+
+    private void GoHome()
+    {
+        Navigation.NavigateTo("/");
+    }
+
+    private sealed class CartItem
+    {
+        public ProductDto Product { get; set; } = default!;
+        public int Quantity { get; set; }
+
+        public decimal Total =>
+            Product.SellingPrice * Quantity;
+    }
+}

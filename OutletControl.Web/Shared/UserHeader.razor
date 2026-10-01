@@ -1,0 +1,184 @@
+﻿@using OutletControl.Web.Auth
+@using OutletControl.Web.Common
+
+@inject OutletControlAuthenticationStateProvider AuthStateProvider
+@inject NavigationManager Navigation
+
+@if (_isAuthenticated)
+{
+    <header class="user-header" dir="rtl">
+
+        <div class="header-brand">
+
+            <div class="friday-mark">
+                F
+            </div>
+
+            <div class="brand-details">
+
+                <div class="brand-top-line">
+
+                    <strong class="company-name">
+                        @OutletBranding.CompanyName
+                    </strong>
+
+                    <span class="brand-separator"></span>
+
+                    <span class="system-name">
+                        @OutletBranding.SystemName
+                    </span>
+
+                </div>
+
+                <div class="outlet-details">
+
+                    <strong>
+                        @OutletBranding.OutletName
+                    </strong>
+
+                    <span class="details-dot">
+                        •
+                    </span>
+
+                    <span>
+                        @OutletBranding.OwnerName
+                    </span>
+
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <div class="header-user">
+
+            <div class="user-info">
+
+                <div class="user-avatar">
+                    @GetInitial()
+                </div>
+
+                <div class="user-details">
+
+                    <strong>
+                        @_fullName
+                    </strong>
+
+                    @if (!string.IsNullOrWhiteSpace(_role))
+                    {
+                        <span>
+                            @GetRoleText()
+                        </span>
+                    }
+
+                </div>
+
+            </div>
+
+            <button type="button"
+                    class="logout-btn"
+                    @onclick="LogoutAsync">
+
+                <span class="logout-icon">
+                    ↪
+                </span>
+
+                <span>
+                    تسجيل الخروج
+                </span>
+
+            </button>
+
+        </div>
+
+    </header>
+}
+
+@code {
+
+    private string _fullName =
+        string.Empty;
+
+    private string _role =
+        string.Empty;
+
+    private bool _isAuthenticated;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState =
+            await AuthStateProvider
+                .GetAuthenticationStateAsync();
+
+        _isAuthenticated =
+            authState.User.Identity?
+                .IsAuthenticated == true;
+
+        if (!_isAuthenticated)
+        {
+            return;
+        }
+
+        _fullName =
+            authState.User
+                .FindFirst("full_name")?
+                .Value
+            ??
+            authState.User.Identity?
+                .Name
+            ??
+            string.Empty;
+
+        _role =
+            authState.User
+                .FindFirst(
+                    System.Security.Claims
+                        .ClaimTypes.Role)?
+                .Value
+            ??
+            string.Empty;
+    }
+
+    private string GetInitial()
+    {
+        if (string.IsNullOrWhiteSpace(
+            _fullName))
+        {
+            return "U";
+        }
+
+        return _fullName
+            .Trim()[0]
+            .ToString()
+            .ToUpperInvariant();
+    }
+
+    private string GetRoleText()
+    {
+        return _role switch
+        {
+            "Admin" =>
+                "مسؤول النظام",
+
+            "Owner" =>
+                "المالك",
+
+            "Cashier" =>
+                "الكاشير",
+
+            _ =>
+                _role
+        };
+    }
+
+    private async Task LogoutAsync()
+    {
+        await AuthStateProvider
+            .NotifyUserLogoutAsync();
+
+        Navigation.NavigateTo(
+            "/login",
+            forceLoad: true);
+    }
+}

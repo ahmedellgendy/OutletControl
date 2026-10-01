@@ -1,0 +1,599 @@
+﻿@page "/receiving/history"
+
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.JSInterop
+@using OutletControl.Contracts.Receiving
+@using OutletControl.Web.Services
+
+@attribute [Authorize(Roles = "Admin,Owner")]
+
+@inject ReceivingApiService ReceivingApiService
+@inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
+
+<PageTitle>سجل الاستلامات - Outlet Control</PageTitle>
+
+<div class="receiving-history-page" dir="rtl">
+
+    <div class="history-shell">
+
+        <header class="history-header">
+
+            <div>
+
+                <span class="history-eyebrow">
+                    المخزون
+                </span>
+
+                <h1>
+                    سجل استلام البضاعة
+                </h1>
+
+                <p>
+                    مراجعة التوريدات السابقة وتفاصيل المنتجات والتكلفة.
+                </p>
+
+            </div>
+
+            <button type="button"
+                    class="back-btn"
+                    @onclick="GoBack">
+                رجوع
+            </button>
+
+        </header>
+
+        <section class="filters-card">
+
+            <div class="filter-group">
+
+                <label>
+                    من تاريخ
+                </label>
+
+                <input type="date"
+                       @bind="_fromDate" />
+
+            </div>
+
+            <div class="filter-group">
+
+                <label>
+                    إلى تاريخ
+                </label>
+
+                <input type="date"
+                       @bind="_toDate" />
+
+            </div>
+
+            <button type="button"
+                    class="filter-btn"
+                    disabled="@_isLoading"
+                    @onclick="LoadAsync">
+                تطبيق
+            </button>
+
+        </section>
+
+        @if (_isLoading)
+        {
+            <div class="state-message">
+                جاري تحميل سجل الاستلامات...
+            </div>
+        }
+        else if (!string.IsNullOrWhiteSpace(
+            _errorMessage))
+        {
+            <div class="state-message error">
+                @_errorMessage
+            </div>
+        }
+        else
+        {
+            <section class="summary-grid">
+
+                <article class="summary-card">
+
+                    <span>
+                        عدد الاستلامات
+                    </span>
+
+                    <strong>
+                        @_items.Count
+                    </strong>
+
+                    <small>
+                        فاتورة / عملية استلام
+                    </small>
+
+                </article>
+
+                <article class="summary-card">
+
+                    <span>
+                        إجمالي الكميات
+                    </span>
+
+                    <strong>
+                        @TotalQuantity
+                    </strong>
+
+                    <small>
+                        قطعة مستلمة
+                    </small>
+
+                </article>
+
+                <article class="summary-card">
+
+                    <span>
+                        إجمالي التوريدات
+                    </span>
+
+                    <strong>
+                        @TotalAmount.ToString("0.##") ج
+                    </strong>
+
+                    <small>
+                        قيمة الاستلامات
+                    </small>
+
+                </article>
+
+            </section>
+
+            @if (_items.Count == 0)
+            {
+                <div class="empty-state">
+
+                    <div>
+                        📥
+                    </div>
+
+                    <strong>
+                        لا توجد استلامات
+                    </strong>
+
+                    <span>
+                        لا توجد عمليات استلام خلال الفترة المحددة.
+                    </span>
+
+                </div>
+            }
+            else
+            {
+                <section class="receipts-list">
+
+                    @foreach (var receipt in _items)
+                    {
+                        <article class="receipt-card">
+
+                            <button type="button"
+                                    class="receipt-main"
+                                    @onclick="() => ToggleReceipt(receipt.Id)">
+
+                                <div class="receipt-identity">
+
+                                    <div class="receipt-icon">
+                                        📥
+                                    </div>
+
+                                    <div>
+
+                                        <span class="receipt-number">
+                                            استلام #@receipt.Id
+                                        </span>
+
+                                        <h2>
+                                            @(string.IsNullOrWhiteSpace(
+                                                receipt.ReferenceNumber)
+                                                ? "بدون رقم مرجع"
+                                                : $"مرجع: {receipt.ReferenceNumber}")
+                                        </h2>
+
+                                        <small>
+                                            @FormatDateTime(
+                                                receipt.ReceivedAt)
+                                        </small>
+
+                                    </div>
+
+                                </div>
+
+                                <div class="receipt-summary">
+
+                                    <div>
+
+                                        <span>
+                                            الأصناف
+                                        </span>
+
+                                        <strong>
+                                            @receipt.ProductsCount
+                                        </strong>
+
+                                    </div>
+
+                                    <div>
+
+                                        <span>
+                                            الكمية
+                                        </span>
+
+                                        <strong>
+                                            @receipt.TotalQuantity
+                                        </strong>
+
+                                    </div>
+
+                                    <div>
+
+                                        <span>
+                                            الإجمالي
+                                        </span>
+
+                                        <strong>
+                                            @receipt.TotalAmount.ToString("0.##") ج
+                                        </strong>
+
+                                    </div>
+
+                                    <span class="expand-arrow">
+                                        @(IsExpanded(receipt.Id)
+                                            ? "▲"
+                                            : "▼")
+                                    </span>
+
+                                </div>
+
+                            </button>
+
+                            <div class="receipt-export-row">
+
+                                <button type="button"
+                                        class="receipt-export-btn"
+                                        disabled="@IsExporting(receipt.Id)"
+                                        @onclick="() => ExportReceiptAsync(receipt.Id)">
+
+                                    @if (IsExporting(
+                                        receipt.Id))
+                                    {
+                                        <span>
+                                            جاري التصدير...
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span>
+                                            تصدير Excel
+                                        </span>
+                                    }
+
+                                </button>
+
+                            </div>
+
+                            @if (_exportErrors.TryGetValue(
+                                receipt.Id,
+                                out var exportError))
+                            {
+                                <div class="receipt-export-error">
+                                    @exportError
+                                </div>
+                            }
+
+                            @if (IsExpanded(
+                                receipt.Id))
+                            {
+                                <div class="receipt-details">
+
+                                    <div class="details-heading">
+
+                                        <span>
+                                            تفاصيل المنتجات
+                                        </span>
+
+                                        <strong>
+                                            @receipt.OutletName
+                                        </strong>
+
+                                    </div>
+
+                                    <div class="items-table-wrapper">
+
+                                        <table class="items-table">
+
+                                            <thead>
+
+                                                <tr>
+
+                                                    <th>
+                                                        المنتج
+                                                    </th>
+
+                                                    <th>
+                                                        الكمية
+                                                    </th>
+
+                                                    <th>
+                                                        تكلفة القطعة
+                                                    </th>
+
+                                                    <th>
+                                                        الإجمالي
+                                                    </th>
+
+                                                </tr>
+
+                                            </thead>
+
+                                            <tbody>
+
+                                                @foreach (
+                                                    var item
+                                                    in receipt.Items)
+                                                {
+                                                    <tr>
+
+                                                        <td>
+                                                            @item.ProductName
+                                                        </td>
+
+                                                        <td>
+                                                            @item.Quantity
+                                                        </td>
+
+                                                        <td>
+                                                            @item.UnitCost.ToString("0.##") ج
+                                                        </td>
+
+                                                        <td>
+                                                            @item.TotalCost.ToString("0.##") ج
+                                                        </td>
+
+                                                    </tr>
+                                                }
+
+                                            </tbody>
+
+                                        </table>
+
+                                    </div>
+
+                                    @if (!string.IsNullOrWhiteSpace(
+                                        receipt.Notes))
+                                    {
+                                        <div class="notes-box">
+
+                                            <span>
+                                                ملاحظات
+                                            </span>
+
+                                            <p>
+                                                @receipt.Notes
+                                            </p>
+
+                                        </div>
+                                    }
+
+                                </div>
+                            }
+
+                        </article>
+                    }
+
+                </section>
+            }
+        }
+
+    </div>
+
+</div>
+
+@code {
+
+    private const int OutletId = 1;
+
+    private readonly List<
+        StockReceiptHistoryItemDto>
+        _items =
+            new();
+
+    private readonly HashSet<int>
+        _expandedReceipts =
+            new();
+
+    private readonly HashSet<int>
+        _exportingReceipts =
+            new();
+
+    private readonly Dictionary<
+        int,
+        string>
+        _exportErrors =
+            new();
+
+    private DateTime? _fromDate =
+        DateTime.Today.AddDays(-6);
+
+    private DateTime? _toDate =
+        DateTime.Today;
+
+    private bool _isLoading =
+        true;
+
+    private string? _errorMessage;
+
+    private int TotalQuantity =>
+        _items.Sum(x =>
+            x.TotalQuantity);
+
+    private decimal TotalAmount =>
+        _items.Sum(x =>
+            x.TotalAmount);
+
+    protected override async Task
+        OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            _isLoading =
+                true;
+
+            _errorMessage =
+                null;
+
+            DateTime? fromUtc =
+                null;
+
+            DateTime? toUtcExclusive =
+                null;
+
+            if (_fromDate.HasValue)
+            {
+                var localStart =
+                    DateTime.SpecifyKind(
+                        _fromDate.Value.Date,
+                        DateTimeKind.Local);
+
+                fromUtc =
+                    localStart
+                        .ToUniversalTime();
+            }
+
+            if (_toDate.HasValue)
+            {
+                var localEndExclusive =
+                    DateTime.SpecifyKind(
+                        _toDate.Value
+                            .Date
+                            .AddDays(1),
+                        DateTimeKind.Local);
+
+                toUtcExclusive =
+                    localEndExclusive
+                        .ToUniversalTime();
+            }
+
+            var result =
+                await ReceivingApiService
+                    .GetHistoryAsync(
+                        OutletId,
+                        fromUtc,
+                        toUtcExclusive);
+
+            _items.Clear();
+
+            _expandedReceipts.Clear();
+
+            _exportErrors.Clear();
+
+            _items.AddRange(
+                result);
+        }
+        catch (Exception ex)
+        {
+            _errorMessage =
+                ex.Message;
+        }
+        finally
+        {
+            _isLoading =
+                false;
+        }
+    }
+
+    private async Task ExportReceiptAsync(
+        int receiptId)
+    {
+        if (!_exportingReceipts.Add(
+            receiptId))
+        {
+            return;
+        }
+
+        try
+        {
+            _exportErrors.Remove(
+                receiptId);
+
+            var file =
+                await ReceivingApiService
+                    .ExportReceiptAsync(
+                        OutletId,
+                        receiptId);
+
+            using var stream =
+                new MemoryStream(
+                    file.Content);
+
+            using var streamReference =
+                new DotNetStreamReference(
+                    stream);
+
+            await JSRuntime.InvokeVoidAsync(
+                "downloadFileFromStream",
+                file.FileName,
+                streamReference);
+        }
+        catch (Exception ex)
+        {
+            _exportErrors[
+                receiptId] =
+                ex.Message;
+        }
+        finally
+        {
+            _exportingReceipts.Remove(
+                receiptId);
+        }
+    }
+
+    private bool IsExporting(
+        int receiptId)
+    {
+        return _exportingReceipts
+            .Contains(
+                receiptId);
+    }
+
+    private void ToggleReceipt(
+        int receiptId)
+    {
+        if (!_expandedReceipts.Add(
+            receiptId))
+        {
+            _expandedReceipts.Remove(
+                receiptId);
+        }
+    }
+
+    private bool IsExpanded(
+        int receiptId)
+    {
+        return _expandedReceipts
+            .Contains(
+                receiptId);
+    }
+
+    private static string FormatDateTime(
+        DateTime value)
+    {
+        return value
+            .ToLocalTime()
+            .ToString(
+                "dd/MM/yyyy - hh:mm tt");
+    }
+
+    private void GoBack()
+    {
+        Navigation.NavigateTo(
+            "/dashboard");
+    }
+}

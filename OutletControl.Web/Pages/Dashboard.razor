@@ -1,0 +1,793 @@
+﻿@page "/dashboard"
+
+@using OutletControl.Contracts.Dashboard
+@using OutletControl.Contracts.Treasury
+@using OutletControl.Web.Services
+@using Microsoft.AspNetCore.Authorization
+
+@attribute [Authorize(Roles = "Admin,Owner")]
+
+@inject DashboardApiService DashboardApiService
+@inject TreasuryApiService TreasuryApiService
+@inject NavigationManager Navigation
+
+<PageTitle>لوحة المتابعة - Outlet Control</PageTitle>
+
+<div class="dashboard-page" dir="rtl">
+
+    <div class="dashboard-shell">
+
+        <header class="dashboard-header">
+
+            <div class="dashboard-title">
+                <span class="dashboard-eyebrow">
+                    نظرة عامة
+                </span>
+
+                <h1>
+                    لوحة المتابعة
+                </h1>
+
+                <p>
+                    ملخص حالة المنفذ والعمليات الرئيسية اليوم
+                </p>
+            </div>
+
+            <div class="header-actions">
+
+                <button type="button"
+                        class="refresh-btn"
+                        disabled="@_isLoading"
+                        @onclick="RefreshAsync">
+                    تحديث البيانات
+                </button>
+
+                <button type="button"
+                        class="back-btn"
+                        @onclick="GoHome">
+                    رجوع
+                </button>
+
+            </div>
+
+        </header>
+
+        @if (_isLoading)
+        {
+            <div class="state-message">
+                جاري تحميل البيانات...
+            </div>
+        }
+        else if (!string.IsNullOrWhiteSpace(_errorMessage))
+        {
+            <div class="state-message error">
+                @_errorMessage
+            </div>
+        }
+        else if (_dashboard is not null)
+        {
+            <section class="overview-section">
+
+                <div class="section-heading">
+
+                    <div>
+                        <span class="section-eyebrow">
+                            اليوم
+                        </span>
+
+                        <h2>
+                            ملخص الأداء
+                        </h2>
+                    </div>
+
+                    <span class="@GetShiftBadgeCss()">
+                        @(_dashboard.HasOpenShift
+                            ? "اليوم مفتوح"
+                            : "اليوم مغلق")
+                    </span>
+
+                </div>
+
+                <div class="metrics-grid">
+
+                    <article class="metric-card sales-card">
+
+                        <div class="metric-icon">
+                            ج
+                        </div>
+
+                        <div class="metric-content">
+
+                            <span>
+                                مبيعات اليوم
+                            </span>
+
+                            <strong class="sales-value">
+                                @_dashboard.TodaySales.ToString("0.##") ج
+                            </strong>
+
+                            <small>
+                                @_dashboard.TodaySalesCount عملية بيع
+                            </small>
+
+                        </div>
+
+                    </article>
+
+                    <article class="metric-card">
+
+                        <div class="metric-icon">
+                            💵
+                        </div>
+
+                        <div class="metric-content">
+
+                            <span>
+                                الكاش المتوقع
+                            </span>
+
+                            <strong>
+                                @_dashboard.CurrentExpectedCash.ToString("0.##") ج
+                            </strong>
+
+                            <small>
+                                حسب عمليات اليوم
+                            </small>
+
+                        </div>
+
+                    </article>
+
+                    <article class="metric-card">
+
+                        <div class="metric-icon">
+                            ◷
+                        </div>
+
+                        <div class="metric-content">
+
+                            <span>
+                                المديونية الحالية
+                            </span>
+
+                            <strong>
+                                @_dashboard.CurrentDebt.ToString("0.##") ج
+                            </strong>
+
+                            <small>
+                                الرصيد الحالي على المنفذ
+                            </small>
+
+                        </div>
+
+                    </article>
+
+                    <article class="metric-card">
+
+                        <div class="metric-icon">
+                            ▦
+                        </div>
+
+                        <div class="metric-content">
+
+                            <span>
+                                المخزون الحالي
+                            </span>
+
+                            <strong>
+                                @_dashboard.CurrentStockUnits
+                                <small class="unit-label">
+                                    قطعة
+                                </small>
+                            </strong>
+
+                            <small class="@GetLowStockCss()">
+                                @_dashboard.LowStockProductsCount منتجات منخفضة المخزون
+                            </small>
+
+                        </div>
+
+                    </article>
+
+                    <article class="metric-card treasury-card">
+
+                        <div class="metric-icon">
+                            💰
+                        </div>
+
+                        <div class="metric-content">
+
+                            <span>
+                                رصيد الخزنة الرئيسية
+                            </span>
+
+                            @if (_treasuryLoaded)
+                            {
+                                <strong class="@GetTreasuryBalanceCss()">
+                                    @_treasuryBalance.ToString("0.##") ج
+                                </strong>
+
+                                <small>
+                                    الرصيد الفعلي المتاح لدى المالك
+                                </small>
+                            }
+                            else
+                            {
+                                <strong>
+                                    —
+                                </strong>
+
+                                <small>
+                                    تعذر تحميل رصيد الخزنة
+                                </small>
+                            }
+
+                        </div>
+
+                    </article>
+
+                </div>
+
+                <div class="financial-insights-grid">
+
+                    <article class="insight-card">
+
+                        <div class="insight-card-header">
+
+                            <div>
+                                <span class="insight-eyebrow">
+                                    اليوم
+                                </span>
+
+                                <h3>
+                                    ربحية المبيعات
+                                </h3>
+                            </div>
+
+                            <span class="insight-badge">
+                                @_dashboard.TodayGrossMarginPercent.ToString("0.##")%
+                            </span>
+
+                        </div>
+
+                        <div class="insight-rows">
+
+                            <div class="insight-row">
+
+                                <span>
+                                    إجمالي المبيعات
+                                </span>
+
+                                <strong>
+                                    @_dashboard.TodaySales.ToString("0.##") ج
+                                </strong>
+
+                            </div>
+
+                            <div class="insight-row">
+
+                                <span>
+                                    تكلفة البضاعة المباعة
+                                </span>
+
+                                <strong>
+                                    @_dashboard.TodaySalesCost.ToString("0.##") ج
+                                </strong>
+
+                            </div>
+
+                            <div class="insight-row total-row">
+
+                                <span>
+                                    مجمل الربح
+                                </span>
+
+                                <strong class="@GetProfitCss(_dashboard.TodayGrossProfit)">
+                                    @_dashboard.TodayGrossProfit.ToString("0.##") ج
+                                </strong>
+
+                            </div>
+
+                        </div>
+
+                    </article>
+
+                    <article class="insight-card">
+
+                        <div class="insight-card-header">
+
+                            <div>
+
+                                <span class="insight-eyebrow">
+                                    القيمة الحالية
+                                </span>
+
+                                <h3>
+                                    قيمة المخزون
+                                </h3>
+
+                            </div>
+
+                            <span class="insight-badge">
+                                @_dashboard.CurrentStockExpectedMarginPercent.ToString("0.##")%
+                            </span>
+
+                        </div>
+
+                        <div class="insight-rows">
+
+                            <div class="insight-row">
+
+                                <span>
+                                    قيمة المخزون بالتكلفة
+                                </span>
+
+                                <strong>
+                                    @_dashboard.CurrentStockCostValue.ToString("0.##") ج
+                                </strong>
+
+                            </div>
+
+                            <div class="insight-row">
+
+                                <span>
+                                    قيمة المخزون بسعر البيع
+                                </span>
+
+                                <strong>
+                                    @_dashboard.CurrentStockRetailValue.ToString("0.##") ج
+                                </strong>
+
+                            </div>
+
+                            <div class="insight-row total-row">
+
+                                <span>
+                                    الربح المتوقع
+                                </span>
+
+                                <strong class="@GetProfitCss(_dashboard.CurrentStockExpectedProfit)">
+                                    @_dashboard.CurrentStockExpectedProfit.ToString("0.##") ج
+                                </strong>
+
+                            </div>
+
+                        </div>
+
+                    </article>
+
+                </div>
+
+                <div class="receiving-summary">
+
+                    <div class="receiving-summary-icon">
+                        📥
+                    </div>
+
+                    <div>
+
+                        <span>
+                            توريدات اليوم
+                        </span>
+
+                        <strong>
+                            @_dashboard.TodayReceivingAmount.ToString("0.##") ج
+                        </strong>
+
+                    </div>
+
+                </div>
+
+            </section>
+
+            <section class="operations-section">
+
+                <div class="section-heading">
+
+                    <div>
+
+                        <span class="section-eyebrow">
+                            الوصول السريع
+                        </span>
+
+                        <h2>
+                            العمليات اليومية
+                        </h2>
+
+                    </div>
+
+                </div>
+
+                <div class="operations-grid">
+
+                    <button type="button"
+                            class="operation-card primary-operation"
+                            @onclick="GoToPos">
+
+                        <span class="operation-icon">
+                            🛒
+                        </span>
+
+                        <span class="operation-text">
+
+                            <strong>
+                                شاشة البيع
+                            </strong>
+
+                            <small>
+                                ابدأ عملية بيع جديدة
+                            </small>
+
+                        </span>
+
+                        <span class="operation-arrow">
+                            ←
+                        </span>
+
+                    </button>
+
+                    <button type="button"
+                            class="operation-card"
+                            @onclick="GoToReceiving">
+
+                        <span class="operation-icon">
+                            📥
+                        </span>
+
+                        <span class="operation-text">
+
+                            <strong>
+                                استلام بضاعة
+                            </strong>
+
+                            <small>
+                                سجل التوريدات والكميات الواردة
+                            </small>
+
+                        </span>
+
+                        <span class="operation-arrow">
+                            ←
+                        </span>
+
+                    </button>
+
+                    <button type="button"
+                            class="operation-card"
+                            @onclick="GoToInventory">
+
+                        <span class="operation-icon">
+                            📦
+                        </span>
+
+                        <span class="operation-text">
+
+                            <strong>
+                                المخزون
+                            </strong>
+
+                            <small>
+                                راجع الأرصدة والكميات الحالية
+                            </small>
+
+                        </span>
+
+                        <span class="operation-arrow">
+                            ←
+                        </span>
+
+                    </button>
+
+                    <button type="button"
+                            class="operation-card"
+                            @onclick="GoToSalesHistory">
+
+                        <span class="operation-icon">
+                            🧾
+                        </span>
+
+                        <span class="operation-text">
+
+                            <strong>
+                                سجل المبيعات
+                            </strong>
+
+                            <small>
+                                راجع الفواتير والأصناف والربحية
+                            </small>
+
+                        </span>
+
+                        <span class="operation-arrow">
+                            ←
+                        </span>
+
+                    </button>
+
+                    <button type="button"
+                            class="operation-card"
+                            @onclick="GoToReceivingHistory">
+
+                        <span class="operation-icon">
+                            📋
+                        </span>
+
+                        <span class="operation-text">
+
+                            <strong>
+                                سجل الاستلامات
+                            </strong>
+
+                            <small>
+                                راجع التوريدات السابقة وتفاصيلها
+                            </small>
+
+                        </span>
+
+                        <span class="operation-arrow">
+                            ←
+                        </span>
+
+                    </button>
+
+                    <button type="button"
+                            class="operation-card"
+                            @onclick="GoToShifts">
+
+                        <span class="operation-icon">
+                            ◷
+                        </span>
+
+                        <span class="operation-text">
+
+                            <strong>
+                                الشيفتات اليومية
+                            </strong>
+
+                            <small>
+                                راجع الفتح والإغلاق والكاش والفروق
+                            </small>
+
+                        </span>
+
+                        <span class="operation-arrow">
+                            ←
+                        </span>
+
+                    </button>
+
+                    <button type="button"
+                            class="operation-card"
+                            @onclick="GoToSupplierAccount">
+
+                        <span class="operation-icon">
+                            💳
+                        </span>
+
+                        <span class="operation-text">
+
+                            <strong>
+                                حساب الشركة
+                            </strong>
+
+                            <small>
+                                راجع الرصيد والحركات المالية
+                            </small>
+
+                        </span>
+
+                        <span class="operation-arrow">
+                            ←
+                        </span>
+
+                    </button>
+
+                    <button type="button"
+                            class="operation-card"
+                            @onclick="GoToTreasury">
+
+                        <span class="operation-icon">
+                            💰
+                        </span>
+
+                        <span class="operation-text">
+
+                            <strong>
+                                الخزنة الرئيسية
+                            </strong>
+
+                            <small>
+                                راجع الرصيد والحركات والمصروفات والتسويات
+                            </small>
+
+                        </span>
+
+                        <span class="operation-arrow">
+                            ←
+                        </span>
+
+                    </button>
+
+                </div>
+
+            </section>
+        }
+
+    </div>
+
+</div>
+
+@code {
+
+    private const int OutletId = 1;
+
+    private OwnerDashboardDto? _dashboard;
+
+    private decimal _treasuryBalance;
+
+    private bool _treasuryLoaded;
+
+    private bool _isLoading = true;
+
+    private string? _errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDashboardAsync();
+    }
+
+    private async Task LoadDashboardAsync()
+    {
+        try
+        {
+            _isLoading =
+                true;
+
+            _errorMessage =
+                null;
+
+            _treasuryLoaded =
+                false;
+
+            _dashboard =
+                await DashboardApiService
+                    .GetOwnerDashboardAsync(
+                        OutletId);
+
+            try
+            {
+                var treasury =
+                    await TreasuryApiService
+                        .GetTreasuryAsync(
+                            OutletId);
+
+                if (treasury is not null)
+                {
+                    _treasuryBalance =
+                        treasury.Summary.CurrentBalance;
+
+                    _treasuryLoaded =
+                        true;
+                }
+                else
+                {
+                    _treasuryBalance =
+                        0m;
+
+                    _treasuryLoaded =
+                        false;
+                }
+            }
+            catch
+            {
+                // Treasury failure should not block
+                // the whole dashboard.
+                _treasuryBalance =
+                    0m;
+
+                _treasuryLoaded =
+                    false;
+            }
+        }
+        catch
+        {
+            _errorMessage =
+                "تعذر تحميل بيانات المنفذ.";
+        }
+        finally
+        {
+            _isLoading =
+                false;
+        }
+    }
+
+    private async Task RefreshAsync()
+    {
+        await LoadDashboardAsync();
+    }
+
+    private string GetShiftBadgeCss()
+    {
+        return _dashboard?.HasOpenShift ==
+               true
+            ? "shift-badge open"
+            : "shift-badge closed";
+    }
+
+    private string GetLowStockCss()
+    {
+        return _dashboard?.LowStockProductsCount >
+               0
+            ? "stock-note warning"
+            : "stock-note success";
+    }
+
+    private static string GetProfitCss(
+        decimal value)
+    {
+        return value < 0
+            ? "profit-value negative"
+            : "profit-value positive";
+    }
+
+    private string GetTreasuryBalanceCss()
+    {
+        return _treasuryBalance < 0
+            ? "profit-value negative"
+            : "profit-value positive";
+    }
+
+    private void GoHome()
+    {
+        Navigation.NavigateTo(
+            "/");
+    }
+
+    private void GoToInventory()
+    {
+        Navigation.NavigateTo(
+            "/inventory");
+    }
+
+    private void GoToReceiving()
+    {
+        Navigation.NavigateTo(
+            "/receiving");
+    }
+
+    private void GoToSalesHistory()
+    {
+        Navigation.NavigateTo(
+            "/sales/history");
+    }
+
+    private void GoToReceivingHistory()
+    {
+        Navigation.NavigateTo(
+            "/receiving/history");
+    }
+
+    private void GoToSupplierAccount()
+    {
+        Navigation.NavigateTo(
+            "/supplier-account");
+    }
+
+    private void GoToTreasury()
+    {
+        Navigation.NavigateTo(
+            "/treasury");
+    }
+
+    private void GoToPos()
+    {
+        Navigation.NavigateTo(
+            "/pos");
+    }
+
+    private void GoToShifts()
+    {
+        Navigation.NavigateTo(
+            "/shifts");
+    }
+}

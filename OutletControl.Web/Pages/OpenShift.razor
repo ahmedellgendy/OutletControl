@@ -1,0 +1,224 @@
+﻿@page "/shift/open"
+
+@using OutletControl.Contracts.Shifts
+@using OutletControl.Web.Services
+@using Microsoft.AspNetCore.Authorization
+
+@attribute [Authorize(Roles = "Admin,Owner,Cashier")]
+
+@inject ShiftApiService ShiftApiService
+@inject NavigationManager Navigation
+
+<PageTitle>فتح اليوم - Outlet Control</PageTitle>
+
+<div class="shift-page" dir="rtl">
+
+    <div class="shift-card">
+
+        <div class="shift-header">
+            <span class="shift-eyebrow">
+                التشغيل اليومي
+            </span>
+
+            <h1>فتح اليوم</h1>
+
+            <p>
+                سجّل رصيد درج الكاش قبل بدء عمليات البيع.
+            </p>
+        </div>
+
+        @if (_isChecking)
+        {
+            <div class="shift-state">
+                جاري التحقق من حالة اليوم...
+            </div>
+        }
+        else if (_openShift is not null)
+        {
+            <div class="already-open">
+
+                <div class="status-icon">
+                    ✓
+                </div>
+
+                <div>
+                    <strong>
+                        اليوم مفتوح بالفعل
+                    </strong>
+
+                    <span>
+                        وقت الفتح:
+                        @_openShift.OpenedAt.ToLocalTime().ToString("hh:mm tt")
+                    </span>
+
+                    <span>
+                        رصيد البداية:
+                        @_openShift.OpeningCash.ToString("0.##") ج
+                    </span>
+                </div>
+
+            </div>
+
+            <button class="main-btn"
+                    @onclick="GoToPos">
+                الدخول إلى شاشة البيع
+            </button>
+
+            <button class="secondary-btn"
+                    @onclick="GoToCloseShift">
+                إغلاق اليوم
+            </button>
+        }
+        else
+        {
+            <div class="form-group">
+
+                <label>
+                    رصيد الكاش في بداية اليوم
+                </label>
+
+                <div class="cash-input-wrapper">
+
+                    <input type="number"
+                           min="0"
+                           step="0.01"
+                           @bind="_openingCash" />
+
+                    <span class="currency">
+                        ج
+                    </span>
+
+                </div>
+
+                <small>
+                    لو درج الكاش فارغ في بداية اليوم، اترك القيمة 0.
+                </small>
+
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(_message))
+            {
+                <div class="error-message">
+                    @_message
+                </div>
+            }
+
+            <button class="main-btn"
+                    disabled="@_isSubmitting"
+                    @onclick="OpenShiftAsync">
+
+                @(_isSubmitting
+                    ? "جاري فتح اليوم..."
+                    : "فتح اليوم")
+
+            </button>
+        }
+
+        <button class="secondary-btn back-btn"
+                @onclick="GoHome">
+            رجوع
+        </button>
+
+    </div>
+
+</div>
+
+@code {
+    private const int OutletId = 1;
+
+    private ShiftDto? _openShift;
+
+    private decimal _openingCash;
+
+    private bool _isChecking = true;
+
+    private bool _isSubmitting;
+
+    private string? _message;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _message = null;
+
+            _openShift =
+                await ShiftApiService
+                    .GetOpenShiftAsync(
+                        OutletId);
+        }
+        catch (Exception ex)
+        {
+            _message =
+                ex.Message;
+        }
+        finally
+        {
+            _isChecking = false;
+        }
+    }
+
+    private async Task OpenShiftAsync()
+    {
+        if (_openingCash < 0)
+        {
+            _message =
+                "رصيد بداية اليوم لا يمكن أن يكون أقل من صفر.";
+
+            return;
+        }
+
+        try
+        {
+            _isSubmitting = true;
+            _message = null;
+
+            var result =
+                await ShiftApiService
+                    .OpenShiftAsync(
+                        new OpenShiftRequest
+                        {
+                            OutletId = OutletId,
+                            OpeningCash = _openingCash
+                        });
+
+            if (result is null)
+            {
+                _message =
+                    "تعذر فتح اليوم.";
+
+                return;
+            }
+
+            Navigation.NavigateTo(
+                "/pos");
+        }
+        catch (Exception ex)
+        {
+            _message =
+                ex.Message;
+        }
+        finally
+        {
+            _isSubmitting = false;
+        }
+    }
+
+    private void GoToPos()
+    {
+        Navigation.NavigateTo(
+            "/pos");
+    }
+
+    private void GoToCloseShift()
+    {
+        Navigation.NavigateTo(
+            "/shift/close");
+    }
+
+    private void GoHome()
+    {
+        Navigation.NavigateTo(
+            "/");
+    }
+}

@@ -1,0 +1,446 @@
+﻿@page "/login"
+
+@using OutletControl.Contracts.Auth
+@using OutletControl.Web.Services
+@using OutletControl.Web.Auth
+
+@inject OutletControlAuthenticationStateProvider AuthStateProvider
+@inject AuthApiService AuthApiService
+@inject NavigationManager Navigation
+
+<PageTitle>تسجيل الدخول - Outlet Control</PageTitle>
+
+<div class="login-page" dir="rtl">
+
+    <div class="login-shell">
+
+        <!-- =========================
+             Friday / Outlet Branding
+             ========================= -->
+        <section class="brand-panel">
+
+            <div class="brand-pattern brand-pattern-one"></div>
+            <div class="brand-pattern brand-pattern-two"></div>
+
+            <div class="brand-content">
+
+                <div class="friday-brand">
+
+                    <div class="friday-logo">
+                        <span class="friday-word">
+                            Friday
+                        </span>
+
+                        <span class="friday-sub">
+                            ICE CREAM
+                        </span>
+                    </div>
+
+                </div>
+
+                <div class="outlet-info">
+
+                    <span class="outlet-label">
+                        FRIDAY ICE CREAM
+                    </span>
+
+                    <h1>
+                        منفذ الأردنية
+                    </h1>
+
+                    <div class="owner-name">
+                        أ/ حسين محمد
+                    </div>
+
+                    <p>
+                        نظام متكامل لإدارة المبيعات والمخزون
+                        والعمل اليومي داخل المنفذ
+                    </p>
+
+                </div>
+
+                <div class="brand-divider"></div>
+
+                <div class="feature-grid">
+
+                    <article class="feature-card">
+
+                        <div class="feature-icon">
+                            📊
+                        </div>
+
+                        <div>
+                            <strong>
+                                المبيعات
+                            </strong>
+
+                            <span>
+                                متابعة المبيعات اليومية
+                            </span>
+                        </div>
+
+                    </article>
+
+                    <article class="feature-card">
+
+                        <div class="feature-icon">
+                            📦
+                        </div>
+
+                        <div>
+                            <strong>
+                                المخزون
+                            </strong>
+
+                            <span>
+                                متابعة الكميات والأرصدة
+                            </span>
+                        </div>
+
+                    </article>
+
+                    <article class="feature-card">
+
+                        <div class="feature-icon">
+                            💰
+                        </div>
+
+                        <div>
+                            <strong>
+                                الخزنة
+                            </strong>
+
+                            <span>
+                                متابعة الكاش والحركات
+                            </span>
+                        </div>
+
+                    </article>
+
+                </div>
+
+                <div class="brand-footer-text">
+                    إدارة أسهل .. متابعة أدق
+                </div>
+
+            </div>
+
+        </section>
+
+
+        <!-- =========================
+             Login Form
+             ========================= -->
+        <section class="form-panel">
+
+            <div class="form-wrapper">
+
+                <div class="system-brand">
+
+                    <div class="system-icon">
+                        <span>▦</span>
+                    </div>
+
+                    <div>
+                        <strong>
+                            Outlet Control
+                        </strong>
+
+                        <span>
+                            نظام إدارة منافذ Friday Ice Cream
+                        </span>
+                    </div>
+
+                </div>
+
+                <div class="login-header">
+
+                    <span class="login-eyebrow">
+                        تسجيل الدخول
+                    </span>
+
+                    <h2>
+                        مرحبًا بك
+                    </h2>
+
+                    <p>
+                        أدخل بيانات حسابك للمتابعة إلى النظام
+                    </p>
+
+                </div>
+
+
+                <div class="login-form">
+
+                    <div class="form-group">
+
+                        <label>
+                            اسم المستخدم
+                        </label>
+
+                        <div class="input-shell">
+
+                            <span class="input-icon">
+                                👤
+                            </span>
+
+                            <input type="text"
+                                   @bind="_userName"
+                                   autocomplete="username"
+                                   placeholder="أدخل اسم المستخدم" />
+
+                        </div>
+
+                    </div>
+
+
+                    <div class="form-group">
+
+                        <label>
+                            كلمة المرور
+                        </label>
+
+                        <div class="input-shell">
+
+                            <span class="input-icon">
+                                🔒
+                            </span>
+
+                            <input type="@(_showPassword ? "text" : "password")"
+                                   @bind="_password"
+                                   autocomplete="current-password"
+                                   placeholder="أدخل كلمة المرور"
+                                   @onkeydown="HandleKeyDown" />
+
+                            <button type="button"
+                                    class="password-toggle"
+                                    tabindex="-1"
+                                    @onclick="TogglePassword">
+
+                                @(_showPassword ? "إخفاء" : "عرض")
+
+                            </button>
+
+                        </div>
+
+                    </div>
+
+
+                    @if (!string.IsNullOrWhiteSpace(_message))
+                    {
+                        <div class="login-error">
+
+                            <span>
+                                !
+                            </span>
+
+                            <p>
+                                @_message
+                            </p>
+
+                        </div>
+                    }
+
+
+                    <button type="button"
+                            class="login-btn"
+                            disabled="@_isLoading"
+                            @onclick="LoginAsync">
+
+                        @if (_isLoading)
+                        {
+                            <span class="login-spinner"></span>
+
+                            <span>
+                                جاري تسجيل الدخول...
+                            </span>
+                        }
+                        else
+                        {
+                            <span>
+                                دخول
+                            </span>
+
+                            <span class="login-arrow">
+                                ←
+                            </span>
+                        }
+
+                    </button>
+
+                </div>
+
+
+                <div class="security-note">
+
+                    <div class="security-icon">
+                        ✓
+                    </div>
+
+                    <div>
+
+                        <strong>
+                            دخول آمن للنظام
+                        </strong>
+
+                        <span>
+                            يرجى استخدام بيانات الحساب المصرح بها فقط
+                        </span>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </section>
+
+    </div>
+
+</div>
+
+
+@code {
+
+    private string _userName =
+        string.Empty;
+
+    private string _password =
+        string.Empty;
+
+    private bool _showPassword;
+
+    private bool _isLoading;
+
+    private string? _message;
+
+
+    private async Task LoginAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_userName) ||
+            string.IsNullOrWhiteSpace(_password))
+        {
+            _message =
+                "أدخل اسم المستخدم وكلمة المرور.";
+
+            return;
+        }
+
+        try
+        {
+            _isLoading =
+                true;
+
+            _message =
+                null;
+
+            var result =
+                await AuthApiService
+                    .LoginAsync(
+                        new LoginRequest
+                        {
+                            UserName =
+                                _userName.Trim(),
+
+                            Password =
+                                _password
+                        });
+
+            if (result is null)
+            {
+                _message =
+                    "تعذر تسجيل الدخول.";
+
+                return;
+            }
+
+            await AuthStateProvider
+                .NotifyUserAuthenticationAsync(
+                    result.Token);
+
+            RedirectByRole(
+                result.Role);
+        }
+        catch (InvalidOperationException ex)
+        {
+            _message =
+                ex.Message;
+        }
+        catch
+        {
+            _message =
+                "تعذر الاتصال بالخادم. حاول مرة أخرى.";
+        }
+        finally
+        {
+            _isLoading =
+                false;
+        }
+    }
+
+
+    private void TogglePassword()
+    {
+        _showPassword =
+            !_showPassword;
+    }
+
+
+    private void RedirectByRole(
+        string? role)
+    {
+        var normalizedRole =
+            role?.Trim();
+
+        if (string.Equals(
+                normalizedRole,
+                "Admin",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            Navigation.NavigateTo(
+                "/admin",
+                forceLoad: true);
+
+            return;
+        }
+
+        if (string.Equals(
+                normalizedRole,
+                "Owner",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            Navigation.NavigateTo(
+                "/dashboard",
+                forceLoad: true);
+
+            return;
+        }
+
+        if (string.Equals(
+                normalizedRole,
+                "Cashier",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            Navigation.NavigateTo(
+                "/cashier",
+                forceLoad: true);
+
+            return;
+        }
+
+        Navigation.NavigateTo(
+            "/",
+            forceLoad: true);
+    }
+
+
+    private async Task HandleKeyDown(
+        Microsoft.AspNetCore.Components.Web.KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" &&
+            !_isLoading)
+        {
+            await LoginAsync();
+        }
+    }
+}

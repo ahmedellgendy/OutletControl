@@ -1,0 +1,48 @@
+﻿.redirect-page {
+    min-height: calc(100dvh - 72px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: #f8f9fb;
+}
+
+.redirect-card {
+    min-width: 280px;
+    padding: 28px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid #e5e7eb;
+    border-radius: 18px;
+    background: #ffffff;
+    text-align: center;
+}
+
+    .redirect-card strong {
+        color: #1f2937;
+        font-size: 16px;
+        font-weight: 900;
+    }
+
+    .redirect-card span {
+        color: #6b7280;
+        font-size: 12px;
+    }
+
+.redirect-spinner {
+    width: 34px;
+    height: 34px;
+    margin-bottom: 8px;
+    border: 3px solid #f3f4f6;
+    border-top-color: #d92d20;
+    border-radius: 50%;
+    animation: redirect-spin .8s linear infinite;
+}
+
+@keyframes redirect-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}

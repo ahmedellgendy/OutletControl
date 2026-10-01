@@ -1,0 +1,396 @@
+﻿@page "/shifts"
+
+@using Microsoft.AspNetCore.Authorization
+@using OutletControl.Contracts.Shifts
+@using OutletControl.Web.Services
+
+@attribute [Authorize(Roles = "Admin,Owner")]
+
+@inject ShiftApiService ShiftApiService
+@inject NavigationManager Navigation
+
+<PageTitle>الشيفتات اليومية - Outlet Control</PageTitle>
+
+<div class="shifts-page" dir="rtl">
+
+    <div class="shifts-shell">
+
+        <header class="shifts-header">
+
+            <div>
+                <span class="page-eyebrow">
+                    التشغيل اليومي
+                </span>
+
+                <h1>الشيفتات اليومية</h1>
+
+                <p>
+                    متابعة فتح وإغلاق اليوم والكاش والمبيعات والفروق.
+                </p>
+            </div>
+
+            <button type="button"
+                    class="back-btn"
+                    @onclick="GoBack">
+                رجوع
+            </button>
+
+        </header>
+
+        <section class="filters-card">
+
+            <div class="filter-group">
+                <label>من تاريخ</label>
+
+                <input type="date"
+                       @bind="_fromDate" />
+            </div>
+
+            <div class="filter-group">
+                <label>إلى تاريخ</label>
+
+                <input type="date"
+                       @bind="_toDate" />
+            </div>
+
+            <div class="filter-group">
+                <label>الحالة</label>
+
+                <select @bind="_statusFilter">
+                    <option value="all">الكل</option>
+                    <option value="open">مفتوح</option>
+                    <option value="closed">مغلق</option>
+                </select>
+            </div>
+
+            <button type="button"
+                    class="search-btn"
+                    disabled="@_isLoading"
+                    @onclick="LoadAsync">
+                تطبيق
+            </button>
+
+        </section>
+
+        @if (_isLoading)
+        {
+            <div class="state-message">
+                جاري تحميل الشيفتات...
+            </div>
+        }
+        else if (!string.IsNullOrWhiteSpace(_errorMessage))
+        {
+            <div class="state-message error">
+                @_errorMessage
+            </div>
+        }
+        else
+        {
+            <section class="summary-grid">
+
+                <article class="summary-card">
+                    <span>عدد الشيفتات</span>
+                    <strong>@_items.Count</strong>
+                    <small>ضمن الفترة المحددة</small>
+                </article>
+
+                <article class="summary-card">
+                    <span>إجمالي المبيعات</span>
+                    <strong>@TotalSales.ToString("0.##") ج</strong>
+                    <small>إجمالي مبيعات الشيفتات</small>
+                </article>
+
+                <article class="summary-card">
+                    <span>إجمالي العجز</span>
+                    <strong class="shortage-value">
+                        @TotalShortage.ToString("0.##") ج
+                    </strong>
+                    <small>الفروق السالبة فقط</small>
+                </article>
+
+                <article class="summary-card">
+                    <span>إجمالي الزيادة</span>
+                    <strong class="surplus-value">
+                        @TotalSurplus.ToString("0.##") ج
+                    </strong>
+                    <small>الفروق الموجبة فقط</small>
+                </article>
+
+            </section>
+
+            @if (_items.Count == 0)
+            {
+                <div class="empty-state">
+                    <div>◷</div>
+                    <strong>لا توجد شيفتات</strong>
+                    <span>لا توجد نتائج مطابقة للفترة والفلاتر المحددة.</span>
+                </div>
+            }
+            else
+            {
+                <section class="shifts-list">
+
+                    @foreach (var item in _items)
+                    {
+                        <article class="shift-card">
+
+                            <div class="shift-card-header">
+
+                                <div>
+                                    <span class="shift-number">
+                                        شيفت #@item.Id
+                                    </span>
+
+                                    <h2>
+                                        @item.OutletName
+                                    </h2>
+                                </div>
+
+                                <span class="@GetStatusCss(item)">
+                                    @(item.IsClosed
+                                        ? "مغلق"
+                                        : "مفتوح")
+                                </span>
+
+                            </div>
+
+                            <div class="time-row">
+
+                                <div>
+                                    <span>وقت الفتح</span>
+
+                                    <strong>
+                                        @FormatDateTime(item.OpenedAt)
+                                    </strong>
+                                </div>
+
+                                <div>
+                                    <span>وقت الإغلاق</span>
+
+                                    <strong>
+                                        @(item.ClosedAt.HasValue
+                                            ? FormatDateTime(item.ClosedAt.Value)
+                                            : "—")
+                                    </strong>
+                                </div>
+
+                            </div>
+
+                            <div class="money-grid">
+
+                                <div>
+                                    <span>رصيد البداية</span>
+                                    <strong>@item.OpeningCash.ToString("0.##") ج</strong>
+                                </div>
+
+                                <div>
+                                    <span>المبيعات</span>
+                                    <strong>@item.SalesAmount.ToString("0.##") ج</strong>
+                                </div>
+
+                                <div>
+                                    <span>الكاش المتوقع</span>
+                                    <strong>@item.ExpectedCash.ToString("0.##") ج</strong>
+                                </div>
+
+                                <div>
+                                    <span>الكاش الفعلي</span>
+                                    <strong>
+                                        @(item.ActualCash.HasValue
+                                            ? $"{item.ActualCash.Value:0.##} ج"
+                                            : "—")
+                                    </strong>
+                                </div>
+
+                            </div>
+
+                            <div class="difference-row">
+
+                                <span>فرق الكاش</span>
+
+                                <strong class="@GetDifferenceCss(item)">
+                                    @GetDifferenceText(item)
+                                </strong>
+
+                            </div>
+
+                            @if (!string.IsNullOrWhiteSpace(item.Notes))
+                            {
+                                <div class="notes-row">
+                                    <span>ملاحظات الإغلاق</span>
+                                    <p>@item.Notes</p>
+                                </div>
+                            }
+
+                        </article>
+                    }
+
+                </section>
+            }
+        }
+
+    </div>
+
+</div>
+
+@code {
+    private const int OutletId = 1;
+
+    private readonly List<ShiftHistoryItemDto> _items = new();
+
+    private DateTime? _fromDate =
+        DateTime.Today.AddDays(-6);
+
+    private DateTime? _toDate =
+        DateTime.Today;
+
+    private string _statusFilter =
+        "all";
+
+    private bool _isLoading = true;
+
+    private string? _errorMessage;
+
+    private decimal TotalSales =>
+        _items.Sum(x => x.SalesAmount);
+
+    private decimal TotalShortage =>
+        Math.Abs(
+            _items
+                .Where(x =>
+                    x.CashDifference.HasValue &&
+                    x.CashDifference.Value < 0)
+                .Sum(x =>
+                    x.CashDifference!.Value));
+
+    private decimal TotalSurplus =>
+        _items
+            .Where(x =>
+                x.CashDifference.HasValue &&
+                x.CashDifference.Value > 0)
+            .Sum(x =>
+                x.CashDifference!.Value);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            _isLoading = true;
+            _errorMessage = null;
+
+            DateTime? fromUtc = null;
+            DateTime? toUtcExclusive = null;
+
+            if (_fromDate.HasValue)
+            {
+                var localStart =
+                    DateTime.SpecifyKind(
+                        _fromDate.Value.Date,
+                        DateTimeKind.Local);
+
+                fromUtc =
+                    localStart.ToUniversalTime();
+            }
+
+            if (_toDate.HasValue)
+            {
+                var localEndExclusive =
+                    DateTime.SpecifyKind(
+                        _toDate.Value.Date.AddDays(1),
+                        DateTimeKind.Local);
+
+                toUtcExclusive =
+                    localEndExclusive.ToUniversalTime();
+            }
+
+            bool? isClosed =
+                _statusFilter switch
+                {
+                    "open" => false,
+                    "closed" => true,
+                    _ => null
+                };
+
+            var result =
+                await ShiftApiService.GetHistoryAsync(
+                    OutletId,
+                    fromUtc,
+                    toUtcExclusive,
+                    isClosed);
+
+            _items.Clear();
+
+            _items.AddRange(result);
+        }
+        catch (Exception ex)
+        {
+            _errorMessage =
+                ex.Message;
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private static string FormatDateTime(
+        DateTime value)
+    {
+        return value
+            .ToLocalTime()
+            .ToString("dd/MM/yyyy - hh:mm tt");
+    }
+
+    private static string GetStatusCss(
+        ShiftHistoryItemDto item)
+    {
+        return item.IsClosed
+            ? "status-badge closed"
+            : "status-badge open";
+    }
+
+    private static string GetDifferenceCss(
+        ShiftHistoryItemDto item)
+    {
+        if (!item.CashDifference.HasValue ||
+            item.CashDifference.Value == 0)
+        {
+            return "difference-value equal";
+        }
+
+        return item.CashDifference.Value > 0
+            ? "difference-value surplus"
+            : "difference-value shortage";
+    }
+
+    private static string GetDifferenceText(
+        ShiftHistoryItemDto item)
+    {
+        if (!item.IsClosed)
+            return "لم يغلق بعد";
+
+        if (!item.CashDifference.HasValue ||
+            item.CashDifference.Value == 0)
+        {
+            return "مطابق";
+        }
+
+        var value =
+            item.CashDifference.Value;
+
+        return value > 0
+            ? $"+{value:0.##} ج زيادة"
+            : $"{value:0.##} ج عجز";
+    }
+
+    private void GoBack()
+    {
+        Navigation.NavigateTo(
+            "/dashboard");
+    }
+}

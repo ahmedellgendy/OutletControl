@@ -1,0 +1,590 @@
+﻿@page "/treasury"
+
+@using Microsoft.AspNetCore.Authorization
+@using OutletControl.Contracts.Treasury
+@using OutletControl.Web.Services
+
+@attribute [Authorize(Roles = "Admin,Owner")]
+
+@inject TreasuryApiService TreasuryApiService
+@inject NavigationManager Navigation
+
+<PageTitle>الخزنة - Outlet Control</PageTitle>
+
+<div class="treasury-page" dir="rtl">
+
+    <div class="treasury-shell">
+
+        <header class="treasury-header">
+            <div>
+                <span class="treasury-eyebrow">الحسابات</span>
+                <h1>الخزنة الرئيسية</h1>
+                <p>رصيد المالك الفعلي وحركات الدخول والخروج والتسويات</p>
+            </div>
+
+            <button type="button"
+                    class="back-btn"
+                    @onclick="GoBack">
+                رجوع
+            </button>
+        </header>
+
+        @if (_isLoading)
+        {
+            <div class="state-message">
+                جاري تحميل بيانات الخزنة...
+            </div>
+        }
+        else if (!string.IsNullOrWhiteSpace(_errorMessage))
+        {
+            <div class="state-message error">
+                @_errorMessage
+            </div>
+        }
+        else if (_page is not null)
+        {
+            <section class="balance-hero">
+
+                <div>
+                    <span>الرصيد الحالي للخزنة</span>
+
+                    <strong class="@GetBalanceCss()">
+                        @_page.Summary.CurrentBalance.ToString("0.##") ج
+                    </strong>
+
+                    <small>
+                        الرصيد الفعلي المتاح لدى المالك
+                    </small>
+                </div>
+
+                <div class="balance-icon">
+                    💰
+                </div>
+
+            </section>
+
+            <section class="summary-grid">
+
+                <article class="summary-card income-card">
+                    <span>إضافات نقدية</span>
+                    <strong>+ @_page.Summary.TotalCashIn.ToString("0.##") ج</strong>
+                    <small>إضافات مباشرة للخزنة</small>
+                </article>
+
+                <article class="summary-card income-card">
+                    <span>تسويات الشيفتات</span>
+                    <strong>+ @_page.Summary.TotalShiftSettlements.ToString("0.##") ج</strong>
+                    <small>الكاش المستلم عند إغلاق الشيفت</small>
+                </article>
+
+                <article class="summary-card expense-card">
+                    <span>تمويل الشيفتات</span>
+                    <strong>- @_page.Summary.TotalShiftOpenings.ToString("0.##") ج</strong>
+                    <small>Opening Cash خرج لدرج الكاشير</small>
+                </article>
+
+                <article class="summary-card expense-card">
+                    <span>المصروفات</span>
+                    <strong>- @_page.Summary.TotalExpenses.ToString("0.##") ج</strong>
+                    <small>مصروفات مدفوعة من الخزنة</small>
+                </article>
+
+                <article class="summary-card expense-card">
+                    <span>سحب نقدي</span>
+                    <strong>- @_page.Summary.TotalCashOut.ToString("0.##") ج</strong>
+                    <small>سحوبات نقدية من الخزنة</small>
+                </article>
+
+                <article class="summary-card expense-card">
+                    <span>سداد الشركة</span>
+                    <strong>- @_page.Summary.TotalSupplierPayments.ToString("0.##") ج</strong>
+                    <small>دفعات المورد / الشركة</small>
+                </article>
+
+            </section>
+
+            <section class="movement-card">
+
+                <div class="section-heading">
+                    <div>
+                        <span>حركة يدوية</span>
+                        <h2>تسجيل حركة خزنة</h2>
+                    </div>
+                </div>
+
+                <div class="movement-form">
+
+                    <div class="form-group">
+                        <label>نوع الحركة</label>
+
+                        <select @bind="_movementType">
+                            <option value="@TreasuryMovementTypeDto.Expense">
+                                مصروف
+                            </option>
+
+                            <option value="@TreasuryMovementTypeDto.CashIn">
+                                إضافة نقدية
+                            </option>
+
+                            <option value="@TreasuryMovementTypeDto.CashOut">
+                                سحب نقدي
+                            </option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>القيمة</label>
+
+                        <div class="money-input">
+                            <input type="number"
+                                   min="0.01"
+                                   step="0.01"
+                                   @bind="_amount" />
+
+                            <span>ج</span>
+                        </div>
+                    </div>
+
+                    @if (_movementType ==
+                        TreasuryMovementTypeDto.Expense)
+                    {
+                        <div class="form-group">
+                            <label>تصنيف المصروف</label>
+
+                            <select @bind="_category">
+                                @foreach (var category in ExpenseCategories)
+                                {
+                                    <option value="@category">
+                                        @category
+                                    </option>
+                                }
+                            </select>
+                        </div>
+                    }
+
+                    <div class="form-group notes-group">
+                        <label>البيان / الملاحظات</label>
+
+                        <input type="text"
+                               @bind="_notes"
+                               placeholder="مثال: شراء أدوات تنظيف" />
+                    </div>
+
+                    <button type="button"
+                            class="save-btn"
+                            disabled="@_isSubmitting"
+                            @onclick="CreateMovementAsync">
+
+                        @(_isSubmitting
+                            ? "جاري الحفظ..."
+                            : "تسجيل الحركة")
+
+                    </button>
+
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(_message))
+                {
+                    <div class="@GetMessageCss()">
+                        @_message
+                    </div>
+                }
+
+            </section>
+
+            <section class="history-card">
+
+                <div class="history-heading">
+
+                    <div>
+                        <span>السجل</span>
+                        <h2>حركات الخزنة</h2>
+                    </div>
+
+                    <div class="filters">
+
+                        <div>
+                            <label>من</label>
+                            <input type="date"
+                                   @bind="_fromDate" />
+                        </div>
+
+                        <div>
+                            <label>إلى</label>
+                            <input type="date"
+                                   @bind="_toDate" />
+                        </div>
+
+                        <button type="button"
+                                class="filter-btn"
+                                disabled="@_isLoadingHistory"
+                                @onclick="LoadHistoryAsync">
+                            تطبيق
+                        </button>
+
+                    </div>
+
+                </div>
+
+                @if (_isLoadingHistory)
+                {
+                    <div class="history-state">
+                        جاري تحميل الحركات...
+                    </div>
+                }
+                else if (_page.Movements.Count == 0)
+                {
+                    <div class="empty-state">
+                        لا توجد حركات خزنة خلال الفترة المحددة.
+                    </div>
+                }
+                else
+                {
+                    <div class="table-wrapper">
+
+                        <table class="treasury-table">
+
+                            <thead>
+                                <tr>
+                                    <th>التاريخ</th>
+                                    <th>النوع</th>
+                                    <th>التصنيف</th>
+                                    <th>القيمة</th>
+                                    <th>الشيفت</th>
+                                    <th>البيان</th>
+                                </tr>
+                            </thead>
+
+                            <tbody>
+                                @foreach (var movement in _page.Movements)
+                                {
+                                    <tr>
+                                        <td>
+                                            @FormatDateTime(
+                                                movement.OccurredAt)
+                                        </td>
+
+                                        <td>
+                                            <span class="@GetMovementBadgeCss(movement.Type)">
+                                                @GetMovementText(movement.Type)
+                                            </span>
+                                        </td>
+
+                                        <td>
+                                            @(string.IsNullOrWhiteSpace(
+                                                movement.Category)
+                                                ? "—"
+                                                : movement.Category)
+                                        </td>
+
+                                        <td class="@GetAmountCss(movement.Type)">
+                                            @GetSignedAmount(movement)
+                                        </td>
+
+                                        <td>
+                                            @(movement.ShiftId.HasValue
+                                                ? $"#{movement.ShiftId}"
+                                                : "—")
+                                        </td>
+
+                                        <td>
+                                            @(string.IsNullOrWhiteSpace(
+                                                movement.Notes)
+                                                ? "—"
+                                                : movement.Notes)
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+
+                        </table>
+
+                    </div>
+                }
+
+            </section>
+        }
+
+    </div>
+
+</div>
+
+@code {
+    private const int OutletId = 1;
+
+    private static readonly string[] ExpenseCategories =
+    [
+        "تشغيل",
+        "نقل",
+        "صيانة",
+        "كهرباء ومرافق",
+        "مشتريات صغيرة",
+        "أخرى"
+    ];
+
+    private TreasuryPageDto? _page;
+
+    private TreasuryMovementTypeDto _movementType =
+        TreasuryMovementTypeDto.Expense;
+
+    private decimal _amount;
+
+    private string _category =
+        ExpenseCategories[0];
+
+    private string? _notes;
+
+    private DateTime? _fromDate =
+        DateTime.Today.AddDays(-6);
+
+    private DateTime? _toDate =
+        DateTime.Today;
+
+    private bool _isLoading = true;
+    private bool _isLoadingHistory;
+    private bool _isSubmitting;
+    private bool _success;
+
+    private string? _errorMessage;
+    private string? _message;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadPageAsync();
+    }
+
+    private async Task LoadPageAsync()
+    {
+        try
+        {
+            _isLoading = true;
+            _errorMessage = null;
+
+            _page =
+                await LoadTreasuryCoreAsync();
+        }
+        catch (Exception ex)
+        {
+            _errorMessage =
+                ex.Message;
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task LoadHistoryAsync()
+    {
+        try
+        {
+            _isLoadingHistory = true;
+            _errorMessage = null;
+
+            _page =
+                await LoadTreasuryCoreAsync();
+        }
+        catch (Exception ex)
+        {
+            _errorMessage =
+                ex.Message;
+        }
+        finally
+        {
+            _isLoadingHistory = false;
+        }
+    }
+
+    private async Task<TreasuryPageDto?> LoadTreasuryCoreAsync()
+    {
+        DateTime? fromUtc = null;
+        DateTime? toUtcExclusive = null;
+
+        if (_fromDate.HasValue)
+        {
+            var localStart =
+                DateTime.SpecifyKind(
+                    _fromDate.Value.Date,
+                    DateTimeKind.Local);
+
+            fromUtc =
+                localStart.ToUniversalTime();
+        }
+
+        if (_toDate.HasValue)
+        {
+            var localEndExclusive =
+                DateTime.SpecifyKind(
+                    _toDate.Value.Date.AddDays(1),
+                    DateTimeKind.Local);
+
+            toUtcExclusive =
+                localEndExclusive.ToUniversalTime();
+        }
+
+        return await TreasuryApiService
+            .GetTreasuryAsync(
+                OutletId,
+                fromUtc,
+                toUtcExclusive);
+    }
+
+    private async Task CreateMovementAsync()
+    {
+        if (_amount <= 0)
+        {
+            _success = false;
+            _message =
+                "أدخل قيمة أكبر من صفر.";
+            return;
+        }
+
+        try
+        {
+            _isSubmitting = true;
+            _message = null;
+            _success = false;
+
+            var result =
+                await TreasuryApiService
+                    .CreateMovementAsync(
+                        new CreateTreasuryMovementRequest
+                        {
+                            OutletId =
+                                OutletId,
+
+                            Type =
+                                _movementType,
+
+                            Amount =
+                                _amount,
+
+                            Category =
+                                _movementType ==
+                                    TreasuryMovementTypeDto.Expense
+                                    ? _category
+                                    : null,
+
+                            Notes =
+                                _notes
+                        });
+
+            if (result is null)
+            {
+                _message =
+                    "تعذر تسجيل الحركة.";
+                return;
+            }
+
+            _success = true;
+
+            _message =
+                "تم تسجيل حركة الخزنة بنجاح.";
+
+            _amount = 0;
+            _notes = null;
+
+            _page =
+                await LoadTreasuryCoreAsync();
+        }
+        catch (Exception ex)
+        {
+            _success = false;
+            _message =
+                ex.Message;
+        }
+        finally
+        {
+            _isSubmitting = false;
+        }
+    }
+
+    private string GetBalanceCss()
+    {
+        return _page?.Summary.CurrentBalance < 0
+            ? "balance-value negative"
+            : "balance-value positive";
+    }
+
+    private string GetMessageCss()
+    {
+        return _success
+            ? "message success"
+            : "message error";
+    }
+
+    private static string GetMovementText(
+        TreasuryMovementTypeDto type)
+    {
+        return type switch
+        {
+            TreasuryMovementTypeDto.Expense =>
+                "مصروف",
+
+            TreasuryMovementTypeDto.CashIn =>
+                "إضافة نقدية",
+
+            TreasuryMovementTypeDto.CashOut =>
+                "سحب نقدي",
+
+            TreasuryMovementTypeDto.SupplierPayment =>
+                "سداد الشركة",
+
+            TreasuryMovementTypeDto.ShiftOpening =>
+                "تمويل شيفت",
+
+            TreasuryMovementTypeDto.ShiftSettlement =>
+                "تسوية شيفت",
+
+            _ =>
+                "حركة"
+        };
+    }
+
+    private static string GetMovementBadgeCss(
+        TreasuryMovementTypeDto type)
+    {
+        return type is
+            TreasuryMovementTypeDto.CashIn or
+            TreasuryMovementTypeDto.ShiftSettlement
+                ? "movement-badge income"
+                : "movement-badge expense";
+    }
+
+    private static string GetAmountCss(
+        TreasuryMovementTypeDto type)
+    {
+        return type is
+            TreasuryMovementTypeDto.CashIn or
+            TreasuryMovementTypeDto.ShiftSettlement
+                ? "amount income"
+                : "amount expense";
+    }
+
+    private static string GetSignedAmount(
+        TreasuryMovementDto movement)
+    {
+        var isIncome =
+            movement.Type is
+                TreasuryMovementTypeDto.CashIn or
+                TreasuryMovementTypeDto.ShiftSettlement;
+
+        return isIncome
+            ? $"+{movement.Amount:0.##} ج"
+            : $"-{movement.Amount:0.##} ج";
+    }
+
+    private static string FormatDateTime(
+        DateTime value)
+    {
+        return value
+            .ToLocalTime()
+            .ToString("dd/MM/yyyy - hh:mm tt");
+    }
+
+    private void GoBack()
+    {
+        Navigation.NavigateTo(
+            "/dashboard");
+    }
+}

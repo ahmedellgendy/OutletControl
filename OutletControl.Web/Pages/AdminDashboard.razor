@@ -1,0 +1,255 @@
+﻿@page "/admin"
+
+@using Microsoft.AspNetCore.Authorization
+
+@attribute [Authorize(Roles = "Admin")]
+
+@inject NavigationManager Navigation
+
+<PageTitle>إدارة النظام - Outlet Control</PageTitle>
+
+<div class="admin-dashboard-page" dir="rtl">
+
+    <div class="admin-shell">
+
+        <header class="admin-header">
+            <div>
+                <span class="admin-eyebrow">إدارة النظام</span>
+                <h1>لوحة تحكم المسؤول</h1>
+                <p>إدارة بيانات التأسيس ومتابعة تشغيل المنفذ</p>
+            </div>
+
+            <button type="button"
+                    class="back-btn"
+                    @onclick="GoHome">
+                رجوع
+            </button>
+        </header>
+
+        <section class="admin-intro-card">
+            <div class="admin-intro-icon">⚙️</div>
+
+            <div>
+                <strong>Setup Data</strong>
+                <span>بيانات التأسيس مخصصة لمسؤول النظام فقط.</span>
+            </div>
+        </section>
+
+        <section class="admin-section">
+
+            <div class="section-heading">
+                <div>
+                    <span>البيانات الأساسية</span>
+                    <h2>إدارة النظام</h2>
+                </div>
+            </div>
+
+            <div class="admin-grid">
+
+                <button type="button"
+                        class="admin-card primary-card"
+                        @onclick="GoToProducts">
+                    <div class="card-icon">📦</div>
+                    <div class="card-content">
+                        <strong>المنتجات</strong>
+                        <span>إدارة المنتجات والأسعار والصور والاستيراد من Excel</span>
+                    </div>
+                    <span class="card-arrow">←</span>
+                </button>
+
+                <button type="button"
+                        class="admin-card"
+                        @onclick="GoToCategories">
+                    <div class="card-icon">🗂️</div>
+                    <div class="card-content">
+                        <strong>التصنيفات</strong>
+                        <span>إدارة فئات المنتجات وترتيب ظهورها</span>
+                    </div>
+                    <span class="card-arrow">←</span>
+                </button>
+
+                <button type="button"
+                        class="admin-card"
+                        @onclick="GoToOpeningStock">
+                    <div class="card-icon">🧾</div>
+                    <div class="card-content">
+                        <strong>الرصيد الافتتاحي</strong>
+                        <span>تسجيل أرصدة المنتجات عند بداية تشغيل المنفذ</span>
+                    </div>
+                    <span class="card-arrow">←</span>
+                </button>
+
+                <button type="button"
+                        class="admin-card"
+                        @onclick="GoToUsers">
+                    <div class="card-icon">👥</div>
+                    <div class="card-content">
+                        <strong>المستخدمون والصلاحيات</strong>
+                        <span>إنشاء وإدارة حسابات Owner و Cashier</span>
+                    </div>
+                    <span class="card-arrow">←</span>
+                </button>
+
+            </div>
+
+        </section>
+
+        <section class="admin-section">
+
+            <div class="section-heading">
+                <div>
+                    <span>التشغيل والمتابعة</span>
+                    <h2>متابعة المنفذ</h2>
+                </div>
+            </div>
+
+            <div class="admin-grid">
+
+                <button type="button"
+                        class="admin-card"
+                        @onclick="GoToDashboard">
+                    <div class="card-icon">📊</div>
+                    <div class="card-content">
+                        <strong>لوحة المتابعة</strong>
+                        <span>ملخص المبيعات والمخزون والربحية والحسابات</span>
+                    </div>
+                    <span class="card-arrow">←</span>
+                </button>
+
+                <button type="button"
+                        class="admin-card"
+                        @onclick="GoToSalesHistory">
+                    <div class="card-icon">🧾</div>
+                    <div class="card-content">
+                        <strong>سجل المبيعات</strong>
+                        <span>مراجعة الفواتير والأصناف والتكلفة ومجمل الربح</span>
+                    </div>
+                    <span class="card-arrow">←</span>
+                </button>
+
+                <button type="button"
+                        class="admin-card"
+                        @onclick="GoToReceivingHistory">
+                    <div class="card-icon">📥</div>
+                    <div class="card-content">
+                        <strong>سجل الاستلامات</strong>
+                        <span>مراجعة التوريدات والفواتير والكميات المستلمة</span>
+                    </div>
+                    <span class="card-arrow">←</span>
+                </button>
+
+                <button type="button"
+                        class="admin-card"
+                        @onclick="GoToShifts">
+                    <div class="card-icon">◷</div>
+                    <div class="card-content">
+                        <strong>الشيفتات اليومية</strong>
+                        <span>مراجعة الفتح والإغلاق والكاش والعجز والزيادة</span>
+                    </div>
+                    <span class="card-arrow">←</span>
+                </button>
+
+                <button type="button"
+                        class="admin-card"
+                        @onclick="GoToSupplierAccount">
+                    <div class="card-icon">💳</div>
+                    <div class="card-content">
+                        <strong>حساب الشركة</strong>
+                        <span>مراجعة التوريدات والمدفوعات والمديونية</span>
+                    </div>
+                    <span class="card-arrow">←</span>
+                </button>
+
+                <button type="button"
+                        class="admin-card"
+                        @onclick="GoToInventory">
+                    <div class="card-icon">▦</div>
+                    <div class="card-content">
+                        <strong>المخزون</strong>
+                        <span>مراجعة الكميات وقيمة المخزون الحالية</span>
+                    </div>
+                    <span class="card-arrow">←</span>
+                </button>
+
+                <button type="button"
+                        class="admin-card"
+                        @onclick="GoToTreasury">
+                    <div class="card-icon">💰</div>
+                    <div class="card-content">
+                        <strong>الخزنة الرئيسية</strong>
+                        <span>الرصيد والحركات والمصروفات والتسويات</span>
+                    </div>
+                    <span class="card-arrow">←</span>
+                </button>
+
+            </div>
+
+        </section>
+
+        <section class="admin-section future-section">
+
+            <div class="section-heading">
+                <div>
+                    <span>لاحقًا</span>
+                    <h2>إعدادات إضافية</h2>
+                </div>
+            </div>
+
+            <div class="future-grid">
+
+                <article class="future-card">
+                    <div class="future-icon">🏪</div>
+
+                    <div>
+                        <strong>إعدادات المنفذ</strong>
+                        <span>بيانات المنفذ والإعدادات العامة</span>
+                    </div>
+
+                    <small>قريبًا</small>
+                </article>
+
+            </div>
+
+        </section>
+
+    </div>
+
+</div>
+
+@code {
+    private void GoHome() =>
+        Navigation.NavigateTo("/");
+
+    private void GoToProducts() =>
+        Navigation.NavigateTo("/admin/products");
+
+    private void GoToCategories() =>
+        Navigation.NavigateTo("/admin/categories");
+
+    private void GoToOpeningStock() =>
+        Navigation.NavigateTo("/admin/opening-stock");
+
+    private void GoToUsers() =>
+        Navigation.NavigateTo("/admin/users");
+
+    private void GoToDashboard() =>
+        Navigation.NavigateTo("/dashboard");
+
+    private void GoToSalesHistory() =>
+        Navigation.NavigateTo("/sales/history");
+
+    private void GoToReceivingHistory() =>
+        Navigation.NavigateTo("/receiving/history");
+
+    private void GoToShifts() =>
+        Navigation.NavigateTo("/shifts");
+
+    private void GoToSupplierAccount() =>
+        Navigation.NavigateTo("/supplier-account");
+
+    private void GoToInventory() =>
+        Navigation.NavigateTo("/inventory");
+
+    private void GoToTreasury() =>
+        Navigation.NavigateTo("/treasury");
+}

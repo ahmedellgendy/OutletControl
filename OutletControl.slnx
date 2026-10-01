@@ -1,0 +1,8 @@
+<Solution>
+  <Project Path="OutletControl.Api/OutletControl.Api.csproj" />
+  <Project Path="OutletControl.Application/OutletControl.Application.csproj" />
+  <Project Path="OutletControl.Contracts/OutletControl.Contracts.csproj" />
+  <Project Path="OutletControl.Domain/OutletControl.Domain.csproj" />
+  <Project Path="OutletControl.Infrastructure/OutletControl.Infrastructure.csproj" />
+  <Project Path="OutletControl.Web/OutletControl.Web.csproj" />
+</Solution>

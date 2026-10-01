@@ -1,0 +1,351 @@
+﻿@page "/shift/close"
+
+@using OutletControl.Contracts.Shifts
+@using OutletControl.Web.Services
+@using Microsoft.AspNetCore.Authorization
+
+@attribute [Authorize(Roles = "Admin,Owner,Cashier")]
+
+@inject ShiftApiService ShiftApiService
+@inject NavigationManager Navigation
+
+<PageTitle>إغلاق اليوم - Outlet Control</PageTitle>
+
+<div class="close-shift-page" dir="rtl">
+
+    <div class="close-shift-card">
+
+        <div class="close-shift-header">
+
+            <span class="close-shift-eyebrow">
+                التشغيل اليومي
+            </span>
+
+            <h1>إغلاق اليوم</h1>
+
+            <p>
+                راجع ملخص اليوم ثم أدخل الكاش الفعلي الموجود في الدرج.
+            </p>
+
+        </div>
+
+        @if (_isLoading)
+        {
+            <div class="state-message">
+                جاري تحميل بيانات اليوم...
+            </div>
+        }
+        else if (_openShift is null)
+        {
+            @if (!string.IsNullOrWhiteSpace(_message))
+            {
+                <div class="message error">
+                    @_message
+                </div>
+            }
+            else
+            {
+                <div class="no-shift-message">
+                    لا يوجد يوم مفتوح حاليًا.
+                </div>
+            }
+
+            <button class="secondary-btn"
+                    @onclick="GoHome">
+                رجوع
+            </button>
+        }
+        else if (_closedShift is not null)
+        {
+            <div class="message success">
+                تم إغلاق اليوم بنجاح.
+            </div>
+
+            <div class="closing-result">
+
+                <div>
+                    <span>الكاش المتوقع</span>
+
+                    <strong>
+                        @_closedShift.ExpectedCash.ToString("0.##") ج
+                    </strong>
+                </div>
+
+                <div>
+                    <span>الكاش الفعلي</span>
+
+                    <strong>
+                        @_closedShift.ActualCash?.ToString("0.##") ج
+                    </strong>
+                </div>
+
+                <div class="@GetDifferenceCss()">
+                    <span>الفرق</span>
+
+                    <strong>
+                        @GetDifferenceText()
+                    </strong>
+                </div>
+
+            </div>
+
+            <button class="main-btn"
+                    @onclick="GoHome">
+                إنهاء
+            </button>
+        }
+        else
+        {
+            <section class="summary-grid">
+
+                <article class="summary-card">
+                    <span>رصيد بداية اليوم</span>
+
+                    <strong>
+                        @_openShift.OpeningCash.ToString("0.##") ج
+                    </strong>
+                </article>
+
+                <article class="summary-card">
+                    <span>مبيعات اليوم</span>
+
+                    <strong>
+                        @_openShift.SalesAmount.ToString("0.##") ج
+                    </strong>
+                </article>
+
+                <article class="summary-card highlight">
+                    <span>الكاش المتوقع</span>
+
+                    <strong>
+                        @_openShift.ExpectedCash.ToString("0.##") ج
+                    </strong>
+                </article>
+
+            </section>
+
+            <div class="form-group">
+
+                <label>
+                    الكاش الفعلي الموجود
+                </label>
+
+                <div class="cash-input-wrapper">
+
+                    <input type="number"
+                           min="0"
+                           step="0.01"
+                           @bind="_actualCash" />
+
+                    <span class="currency">
+                        ج
+                    </span>
+
+                </div>
+
+                <small>
+                    عدّ الكاش الموجود فعليًا في الدرج قبل تأكيد الإغلاق.
+                </small>
+
+            </div>
+
+            <div class="difference-preview @GetPreviewDifferenceCss()">
+
+                <span>
+                    الفرق الحالي
+                </span>
+
+                <strong>
+                    @CurrentDifference.ToString("0.##") ج
+                </strong>
+
+            </div>
+
+            <div class="form-group">
+
+                <label>
+                    ملاحظات
+                </label>
+
+                <textarea rows="3"
+                          @bind="_notes"
+                          placeholder="اختياري">
+                </textarea>
+
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(_message))
+            {
+                <div class="message error">
+                    @_message
+                </div>
+            }
+
+            <button class="main-btn"
+                    disabled="@_isSubmitting"
+                    @onclick="CloseShiftAsync">
+
+                @(_isSubmitting
+                    ? "جاري إغلاق اليوم..."
+                    : "تأكيد إغلاق اليوم")
+
+            </button>
+
+            <button class="secondary-btn"
+                    disabled="@_isSubmitting"
+                    @onclick="GoHome">
+                رجوع
+            </button>
+        }
+
+    </div>
+
+</div>
+
+@code {
+    private const int OutletId = 1;
+
+    private ShiftDto? _openShift;
+
+    private ShiftDto? _closedShift;
+
+    private decimal _actualCash;
+
+    private string? _notes;
+
+    private bool _isLoading = true;
+
+    private bool _isSubmitting;
+
+    private string? _message;
+
+    private decimal CurrentDifference =>
+        _openShift is null
+            ? 0
+            : _actualCash -
+              _openShift.ExpectedCash;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _message = null;
+
+            _openShift =
+                await ShiftApiService
+                    .GetOpenShiftAsync(
+                        OutletId);
+
+            if (_openShift is not null)
+            {
+                _actualCash =
+                    _openShift.ExpectedCash;
+            }
+        }
+        catch (Exception ex)
+        {
+            _message =
+                ex.Message;
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task CloseShiftAsync()
+    {
+        if (_openShift is null)
+            return;
+
+        if (_actualCash < 0)
+        {
+            _message =
+                "الكاش الفعلي لا يمكن أن يكون أقل من صفر.";
+
+            return;
+        }
+
+        try
+        {
+            _isSubmitting = true;
+            _message = null;
+
+            _closedShift =
+                await ShiftApiService
+                    .CloseShiftAsync(
+                        new CloseShiftRequest
+                        {
+                            ShiftId =
+                                _openShift.Id,
+
+                            ActualCash =
+                                _actualCash,
+
+                            Notes =
+                                _notes
+                        });
+
+            if (_closedShift is null)
+            {
+                _message =
+                    "تعذر إغلاق اليوم.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _message =
+                ex.Message;
+        }
+        finally
+        {
+            _isSubmitting = false;
+        }
+    }
+
+    private string GetDifferenceCss()
+    {
+        if (_closedShift?.CashDifference is null)
+            return "difference";
+
+        if (_closedShift.CashDifference == 0)
+            return "difference equal";
+
+        return _closedShift.CashDifference > 0
+            ? "difference surplus"
+            : "difference shortage";
+    }
+
+    private string GetPreviewDifferenceCss()
+    {
+        if (CurrentDifference == 0)
+            return "equal";
+
+        return CurrentDifference > 0
+            ? "surplus"
+            : "shortage";
+    }
+
+    private string GetDifferenceText()
+    {
+        if (_closedShift?.CashDifference is null)
+            return "0 ج";
+
+        var value =
+            _closedShift.CashDifference.Value;
+
+        if (value == 0)
+            return "مطابق";
+
+        if (value > 0)
+            return $"+{value:0.##} ج زيادة";
+
+        return $"{value:0.##} ج عجز";
+    }
+
+    private void GoHome()
+    {
+        Navigation.NavigateTo(
+            "/");
+    }
+}

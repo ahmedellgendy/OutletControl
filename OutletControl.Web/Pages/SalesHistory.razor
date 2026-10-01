@@ -1,0 +1,428 @@
+﻿@page "/sales/history"
+
+@using Microsoft.AspNetCore.Authorization
+@using OutletControl.Contracts.Sales
+@using OutletControl.Web.Services
+
+@attribute [Authorize(Roles = "Admin,Owner")]
+
+@inject SalesApiService SalesApiService
+@inject NavigationManager Navigation
+
+<PageTitle>سجل المبيعات - Outlet Control</PageTitle>
+
+<div class="sales-history-page" dir="rtl">
+
+    <div class="sales-shell">
+
+        <header class="sales-header">
+
+            <div>
+                <span class="sales-eyebrow">
+                    المبيعات
+                </span>
+
+                <h1>سجل المبيعات</h1>
+
+                <p>
+                    مراجعة عمليات البيع والأصناف والربحية خلال الفترة المحددة.
+                </p>
+            </div>
+
+            <button type="button"
+                    class="back-btn"
+                    @onclick="GoBack">
+                رجوع
+            </button>
+
+        </header>
+
+        <section class="filters-card">
+
+            <div class="filter-group">
+                <label>من تاريخ</label>
+
+                <input type="date"
+                       @bind="_fromDate" />
+            </div>
+
+            <div class="filter-group">
+                <label>إلى تاريخ</label>
+
+                <input type="date"
+                       @bind="_toDate" />
+            </div>
+
+            <button type="button"
+                    class="filter-btn"
+                    disabled="@_isLoading"
+                    @onclick="LoadAsync">
+                تطبيق
+            </button>
+
+        </section>
+
+        @if (_isLoading)
+        {
+            <div class="state-message">
+                جاري تحميل سجل المبيعات...
+            </div>
+        }
+        else if (!string.IsNullOrWhiteSpace(_errorMessage))
+        {
+            <div class="state-message error">
+                @_errorMessage
+            </div>
+        }
+        else
+        {
+            <section class="summary-grid">
+
+                <article class="summary-card">
+                    <span>عدد عمليات البيع</span>
+
+                    <strong>
+                        @_items.Count
+                    </strong>
+
+                    <small>
+                        فاتورة بيع
+                    </small>
+                </article>
+
+                <article class="summary-card">
+                    <span>إجمالي المبيعات</span>
+
+                    <strong>
+                        @TotalSales.ToString("0.##") ج
+                    </strong>
+
+                    <small>
+                        قيمة المبيعات
+                    </small>
+                </article>
+
+                <article class="summary-card">
+                    <span>تكلفة البضاعة المباعة</span>
+
+                    <strong>
+                        @TotalCost.ToString("0.##") ج
+                    </strong>
+
+                    <small>
+                        حسب تكلفة وقت البيع
+                    </small>
+                </article>
+
+                <article class="summary-card profit-card">
+                    <span>مجمل الربح</span>
+
+                    <strong class="@GetProfitCss(TotalGrossProfit)">
+                        @TotalGrossProfit.ToString("0.##") ج
+                    </strong>
+
+                    <small>
+                        المبيعات ناقص التكلفة
+                    </small>
+                </article>
+
+            </section>
+
+            @if (_items.Count == 0)
+            {
+                <div class="empty-state">
+                    <div>🧾</div>
+                    <strong>لا توجد مبيعات</strong>
+                    <span>لا توجد عمليات بيع خلال الفترة المحددة.</span>
+                </div>
+            }
+            else
+            {
+                <section class="sales-list">
+
+                    @foreach (var sale in _items)
+                    {
+                        <article class="sale-card">
+
+                            <button type="button"
+                                    class="sale-main"
+                                    @onclick="() => ToggleSale(sale.Id)">
+
+                                <div class="sale-identity">
+
+                                    <div class="sale-icon">
+                                        🛒
+                                    </div>
+
+                                    <div>
+                                        <span class="sale-number">
+                                            فاتورة #@sale.Id
+                                        </span>
+
+                                        <h2>
+                                            @sale.TotalAmount.ToString("0.##") ج
+                                        </h2>
+
+                                        <small>
+                                            @FormatDateTime(sale.SoldAt)
+                                            · شيفت #@sale.ShiftId
+                                        </small>
+                                    </div>
+
+                                </div>
+
+                                <div class="sale-summary">
+
+                                    <div>
+                                        <span>الأصناف</span>
+                                        <strong>@sale.ProductsCount</strong>
+                                    </div>
+
+                                    <div>
+                                        <span>الكمية</span>
+                                        <strong>@sale.TotalQuantity</strong>
+                                    </div>
+
+                                    <div>
+                                        <span>الربح</span>
+
+                                        <strong class="@GetProfitCss(sale.GrossProfit)">
+                                            @sale.GrossProfit.ToString("0.##") ج
+                                        </strong>
+                                    </div>
+
+                                    <span class="expand-arrow">
+                                        @(IsExpanded(sale.Id) ? "▲" : "▼")
+                                    </span>
+
+                                </div>
+
+                            </button>
+
+                            @if (IsExpanded(sale.Id))
+                            {
+                                <div class="sale-details">
+
+                                    <div class="details-heading">
+                                        <span>تفاصيل الأصناف</span>
+                                        <strong>@sale.OutletName</strong>
+                                    </div>
+
+                                    <div class="items-table-wrapper">
+
+                                        <table class="items-table">
+
+                                            <thead>
+                                                <tr>
+                                                    <th>المنتج</th>
+                                                    <th>الكمية</th>
+                                                    <th>سعر البيع</th>
+                                                    <th>إجمالي البيع</th>
+                                                    <th>التكلفة</th>
+                                                    <th>الربح</th>
+                                                </tr>
+                                            </thead>
+
+                                            <tbody>
+
+                                                @foreach (var item in sale.Items)
+                                                {
+                                                    <tr>
+
+                                                        <td>
+                                                            @item.ProductName
+                                                        </td>
+
+                                                        <td>
+                                                            @item.Quantity
+                                                        </td>
+
+                                                        <td>
+                                                            @item.UnitPrice.ToString("0.##") ج
+                                                        </td>
+
+                                                        <td>
+                                                            @item.TotalAmount.ToString("0.##") ج
+                                                        </td>
+
+                                                        <td>
+                                                            @item.TotalCost.ToString("0.##") ج
+                                                        </td>
+
+                                                        <td class="@GetProfitCss(item.GrossProfit)">
+                                                            @item.GrossProfit.ToString("0.##") ج
+                                                        </td>
+
+                                                    </tr>
+                                                }
+
+                                            </tbody>
+
+                                        </table>
+
+                                    </div>
+
+                                    <div class="sale-totals">
+
+                                        <div>
+                                            <span>إجمالي البيع</span>
+                                            <strong>@sale.TotalAmount.ToString("0.##") ج</strong>
+                                        </div>
+
+                                        <div>
+                                            <span>إجمالي التكلفة</span>
+                                            <strong>@sale.TotalCost.ToString("0.##") ج</strong>
+                                        </div>
+
+                                        <div>
+                                            <span>مجمل الربح</span>
+                                            <strong class="@GetProfitCss(sale.GrossProfit)">
+                                                @sale.GrossProfit.ToString("0.##") ج
+                                            </strong>
+                                        </div>
+
+                                    </div>
+
+                                </div>
+                            }
+
+                        </article>
+                    }
+
+                </section>
+            }
+        }
+
+    </div>
+
+</div>
+
+@code {
+    private const int OutletId = 1;
+
+    private readonly List<SaleHistoryItemDto> _items = new();
+
+    private readonly HashSet<int> _expandedSales = new();
+
+    private DateTime? _fromDate =
+        DateTime.Today.AddDays(-6);
+
+    private DateTime? _toDate =
+        DateTime.Today;
+
+    private bool _isLoading = true;
+
+    private string? _errorMessage;
+
+    private decimal TotalSales =>
+        _items.Sum(x =>
+            x.TotalAmount);
+
+    private decimal TotalCost =>
+        _items.Sum(x =>
+            x.TotalCost);
+
+    private decimal TotalGrossProfit =>
+        _items.Sum(x =>
+            x.GrossProfit);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            _isLoading = true;
+            _errorMessage = null;
+
+            DateTime? fromUtc = null;
+            DateTime? toUtcExclusive = null;
+
+            if (_fromDate.HasValue)
+            {
+                var localStart =
+                    DateTime.SpecifyKind(
+                        _fromDate.Value.Date,
+                        DateTimeKind.Local);
+
+                fromUtc =
+                    localStart.ToUniversalTime();
+            }
+
+            if (_toDate.HasValue)
+            {
+                var localEndExclusive =
+                    DateTime.SpecifyKind(
+                        _toDate.Value.Date.AddDays(1),
+                        DateTimeKind.Local);
+
+                toUtcExclusive =
+                    localEndExclusive.ToUniversalTime();
+            }
+
+            var result =
+                await SalesApiService
+                    .GetHistoryAsync(
+                        OutletId,
+                        fromUtc,
+                        toUtcExclusive);
+
+            _items.Clear();
+            _expandedSales.Clear();
+
+            _items.AddRange(
+                result);
+        }
+        catch (Exception ex)
+        {
+            _errorMessage =
+                ex.Message;
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private void ToggleSale(
+        int saleId)
+    {
+        if (!_expandedSales.Add(saleId))
+        {
+            _expandedSales.Remove(
+                saleId);
+        }
+    }
+
+    private bool IsExpanded(
+        int saleId)
+    {
+        return _expandedSales.Contains(
+            saleId);
+    }
+
+    private static string FormatDateTime(
+        DateTime value)
+    {
+        return value
+            .ToLocalTime()
+            .ToString("dd/MM/yyyy - hh:mm tt");
+    }
+
+    private static string GetProfitCss(
+        decimal value)
+    {
+        return value < 0
+            ? "profit-value negative"
+            : "profit-value positive";
+    }
+
+    private void GoBack()
+    {
+        Navigation.NavigateTo(
+            "/dashboard");
+    }
+}

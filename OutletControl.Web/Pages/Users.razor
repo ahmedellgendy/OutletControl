@@ -1,0 +1,575 @@
+﻿@page "/admin/users"
+
+@using Microsoft.AspNetCore.Authorization
+@using OutletControl.Contracts.Users
+@using OutletControl.Web.Services
+
+@attribute [Authorize(Roles = "Admin")]
+
+@inject UserManagementApiService UserManagementApiService
+@inject NavigationManager Navigation
+
+<PageTitle>المستخدمون - Outlet Control</PageTitle>
+
+<div class="users-page" dir="rtl">
+
+    <div class="users-shell">
+
+        <header class="users-header">
+            <div>
+                <span class="users-eyebrow">إدارة النظام</span>
+                <h1>المستخدمون والصلاحيات</h1>
+                <p>إنشاء وإدارة حسابات Owner و Cashier</p>
+            </div>
+
+            <button type="button"
+                    class="back-btn"
+                    @onclick="GoBack">
+                رجوع
+            </button>
+        </header>
+
+        <section class="create-card">
+            <div class="section-heading">
+                <div>
+                    <span>مستخدم جديد</span>
+                    <h2>إنشاء حساب</h2>
+                </div>
+            </div>
+
+            <div class="create-grid">
+
+                <div class="form-group">
+                    <label>اسم المستخدم</label>
+                    <input type="text"
+                           @bind="_newUserName"
+                           placeholder="مثال: cashier2" />
+                </div>
+
+                <div class="form-group">
+                    <label>الاسم الكامل</label>
+                    <input type="text"
+                           @bind="_newFullName"
+                           placeholder="اسم الموظف" />
+                </div>
+
+                <div class="form-group">
+                    <label>الدور</label>
+                    <select @bind="_newRole">
+                        <option value="Cashier">Cashier</option>
+                        <option value="Owner">Owner</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>المنفذ</label>
+                    <select @bind="_newOutletId">
+                        <option value="1">المنفذ الرئيسي</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>كلمة المرور</label>
+                    <input type="password"
+                           @bind="_newPassword"
+                           placeholder="كلمة مرور مؤقتة" />
+                </div>
+
+                <button type="button"
+                        class="create-btn"
+                        disabled="@_isCreating"
+                        @onclick="CreateUserAsync">
+                    @(_isCreating
+                        ? "جاري الإنشاء..."
+                        : "إنشاء المستخدم")
+                </button>
+
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(_message))
+            {
+                <div class="@GetMessageCss()">
+                    @_message
+                </div>
+            }
+
+        </section>
+
+        <section class="users-card">
+
+            <div class="section-heading">
+                <div>
+                    <span>الحسابات</span>
+                    <h2>المستخدمون الحاليون</h2>
+                </div>
+
+                <button type="button"
+                        class="refresh-btn"
+                        disabled="@_isLoading"
+                        @onclick="LoadUsersAsync">
+                    تحديث
+                </button>
+            </div>
+
+            @if (_isLoading)
+            {
+                <div class="state-message">
+                    جاري تحميل المستخدمين...
+                </div>
+            }
+            else if (!string.IsNullOrWhiteSpace(_errorMessage))
+            {
+                <div class="state-message error">
+                    @_errorMessage
+                </div>
+            }
+            else
+            {
+                <div class="users-list">
+
+                    @foreach (var user in _users)
+                    {
+                        <article class="user-card">
+
+                            <div class="user-main">
+
+                                <div class="avatar">
+                                    @GetInitial(user.FullName)
+                                </div>
+
+                                <div class="user-info">
+                                    <div class="user-name-row">
+                                        <strong>@user.FullName</strong>
+
+                                        <span class="@GetStatusCss(user)">
+                                            @(user.IsActive
+                                                ? "نشط"
+                                                : "موقوف")
+                                        </span>
+
+                                        @if (user.IsProtectedAdmin)
+                                        {
+                                            <span class="protected-badge">
+                                                محمي
+                                            </span>
+                                        }
+                                    </div>
+
+                                    <span>
+                                        @user.UserName
+                                        · @user.Role
+                                        · المنفذ #@user.OutletId
+                                    </span>
+                                </div>
+
+                            </div>
+
+                            <div class="user-actions">
+
+                                @if (!user.IsProtectedAdmin)
+                                {
+                                    <button type="button"
+                                            class="action-btn"
+                                            @onclick="() => StartEdit(user)">
+                                        تعديل
+                                    </button>
+
+                                    <button type="button"
+                                            class="action-btn"
+                                            @onclick="() => StartResetPassword(user)">
+                                        كلمة المرور
+                                    </button>
+
+                                    <button type="button"
+                                            class="action-btn danger"
+                                            disabled="@(_busyUserId == user.Id)"
+                                            @onclick="() => ToggleActiveAsync(user)">
+                                        @(user.IsActive
+                                            ? "إيقاف"
+                                            : "تفعيل")
+                                    </button>
+                                }
+
+                            </div>
+
+                            @if (_editingUserId == user.Id)
+                            {
+                                <div class="inline-panel">
+
+                                    <div class="form-group">
+                                        <label>الاسم الكامل</label>
+                                        <input type="text"
+                                               @bind="_editFullName" />
+                                    </div>
+
+                                    <div class="form-group">
+                                        <label>الدور</label>
+                                        <select @bind="_editRole">
+                                            <option value="Cashier">Cashier</option>
+                                            <option value="Owner">Owner</option>
+                                        </select>
+                                    </div>
+
+                                    <div class="form-group">
+                                        <label>المنفذ</label>
+                                        <select @bind="_editOutletId">
+                                            <option value="1">المنفذ الرئيسي</option>
+                                        </select>
+                                    </div>
+
+                                    <div class="panel-actions">
+                                        <button type="button"
+                                                class="save-btn"
+                                                @onclick="() => SaveEditAsync(user)">
+                                            حفظ
+                                        </button>
+
+                                        <button type="button"
+                                                class="cancel-btn"
+                                                @onclick="CancelInlinePanels">
+                                            إلغاء
+                                        </button>
+                                    </div>
+
+                                </div>
+                            }
+
+                            @if (_resetPasswordUserId == user.Id)
+                            {
+                                <div class="inline-panel password-panel">
+
+                                    <div class="form-group">
+                                        <label>كلمة المرور الجديدة</label>
+                                        <input type="password"
+                                               @bind="_resetPassword" />
+                                    </div>
+
+                                    <div class="panel-actions">
+                                        <button type="button"
+                                                class="save-btn"
+                                                @onclick="() => ResetPasswordAsync(user)">
+                                            تغيير كلمة المرور
+                                        </button>
+
+                                        <button type="button"
+                                                class="cancel-btn"
+                                                @onclick="CancelInlinePanels">
+                                            إلغاء
+                                        </button>
+                                    </div>
+
+                                </div>
+                            }
+
+                        </article>
+                    }
+
+                </div>
+            }
+
+        </section>
+
+    </div>
+
+</div>
+
+@code {
+    private readonly List<AdminUserDto> _users = new();
+
+    private string? _newUserName;
+    private string? _newFullName;
+    private string _newRole = "Cashier";
+    private int _newOutletId = 1;
+    private string? _newPassword;
+
+    private int? _editingUserId;
+    private string? _editFullName;
+    private string _editRole = "Cashier";
+    private int _editOutletId = 1;
+
+    private int? _resetPasswordUserId;
+    private string? _resetPassword;
+
+    private int? _busyUserId;
+
+    private bool _isLoading = true;
+    private bool _isCreating;
+    private bool _success;
+
+    private string? _message;
+    private string? _errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadUsersAsync();
+    }
+
+    private async Task LoadUsersAsync()
+    {
+        try
+        {
+            _isLoading = true;
+            _errorMessage = null;
+
+            var users =
+                await UserManagementApiService
+                    .GetUsersAsync();
+
+            _users.Clear();
+            _users.AddRange(users);
+        }
+        catch (Exception ex)
+        {
+            _errorMessage =
+                ex.Message;
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task CreateUserAsync()
+    {
+        try
+        {
+            _isCreating = true;
+            _message = null;
+            _success = false;
+
+            var result =
+                await UserManagementApiService
+                    .CreateUserAsync(
+                        new CreateAdminUserRequest
+                        {
+                            UserName =
+                                _newUserName ?? string.Empty,
+
+                            FullName =
+                                _newFullName ?? string.Empty,
+
+                            Password =
+                                _newPassword ?? string.Empty,
+
+                            Role =
+                                _newRole,
+
+                            OutletId =
+                                _newOutletId
+                        });
+
+            if (result is null)
+            {
+                _message =
+                    "تعذر إنشاء المستخدم.";
+                return;
+            }
+
+            _success = true;
+            _message =
+                "تم إنشاء المستخدم بنجاح.";
+
+            _newUserName = null;
+            _newFullName = null;
+            _newPassword = null;
+            _newRole = "Cashier";
+            _newOutletId = 1;
+
+            await LoadUsersAsync();
+        }
+        catch (Exception ex)
+        {
+            _success = false;
+            _message =
+                ex.Message;
+        }
+        finally
+        {
+            _isCreating = false;
+        }
+    }
+
+    private void StartEdit(
+        AdminUserDto user)
+    {
+        _resetPasswordUserId = null;
+        _resetPassword = null;
+
+        _editingUserId =
+            user.Id;
+
+        _editFullName =
+            user.FullName;
+
+        _editRole =
+            user.Role;
+
+        _editOutletId =
+            user.OutletId;
+    }
+
+    private async Task SaveEditAsync(
+        AdminUserDto user)
+    {
+        try
+        {
+            var result =
+                await UserManagementApiService
+                    .UpdateUserAsync(
+                        user.Id,
+                        new UpdateAdminUserRequest
+                        {
+                            FullName =
+                                _editFullName
+                                ?? string.Empty,
+
+                            Role =
+                                _editRole,
+
+                            OutletId =
+                                _editOutletId
+                        });
+
+            if (result is null)
+                return;
+
+            ReplaceUser(result);
+
+            _editingUserId = null;
+
+            _success = true;
+            _message =
+                "تم تحديث المستخدم بنجاح.";
+        }
+        catch (Exception ex)
+        {
+            _success = false;
+            _message =
+                ex.Message;
+        }
+    }
+
+    private void StartResetPassword(
+        AdminUserDto user)
+    {
+        _editingUserId = null;
+
+        _resetPasswordUserId =
+            user.Id;
+
+        _resetPassword = null;
+    }
+
+    private async Task ResetPasswordAsync(
+        AdminUserDto user)
+    {
+        try
+        {
+            await UserManagementApiService
+                .ResetPasswordAsync(
+                    user.Id,
+                    _resetPassword
+                    ?? string.Empty);
+
+            _resetPasswordUserId = null;
+            _resetPassword = null;
+
+            _success = true;
+            _message =
+                "تم تغيير كلمة المرور بنجاح.";
+        }
+        catch (Exception ex)
+        {
+            _success = false;
+            _message =
+                ex.Message;
+        }
+    }
+
+    private async Task ToggleActiveAsync(
+        AdminUserDto user)
+    {
+        try
+        {
+            _busyUserId =
+                user.Id;
+
+            var result =
+                await UserManagementApiService
+                    .SetActiveAsync(
+                        user.Id,
+                        !user.IsActive);
+
+            if (result is null)
+                return;
+
+            ReplaceUser(result);
+
+            _success = true;
+            _message =
+                result.IsActive
+                    ? "تم تفعيل المستخدم."
+                    : "تم إيقاف المستخدم.";
+        }
+        catch (Exception ex)
+        {
+            _success = false;
+            _message =
+                ex.Message;
+        }
+        finally
+        {
+            _busyUserId = null;
+        }
+    }
+
+    private void ReplaceUser(
+        AdminUserDto updated)
+    {
+        var index =
+            _users.FindIndex(x =>
+                x.Id == updated.Id);
+
+        if (index >= 0)
+        {
+            _users[index] =
+                updated;
+        }
+    }
+
+    private void CancelInlinePanels()
+    {
+        _editingUserId = null;
+        _resetPasswordUserId = null;
+        _resetPassword = null;
+    }
+
+    private static string GetInitial(
+        string fullName)
+    {
+        return string.IsNullOrWhiteSpace(fullName)
+            ? "U"
+            : fullName.Trim()[0].ToString();
+    }
+
+    private static string GetStatusCss(
+        AdminUserDto user)
+    {
+        return user.IsActive
+            ? "status-badge active"
+            : "status-badge inactive";
+    }
+
+    private string GetMessageCss()
+    {
+        return _success
+            ? "page-message success"
+            : "page-message error";
+    }
+
+    private void GoBack()
+    {
+        Navigation.NavigateTo(
+            "/admin");
+    }
+}

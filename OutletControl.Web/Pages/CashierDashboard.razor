@@ -1,0 +1,283 @@
+﻿@page "/cashier"
+
+@using Microsoft.AspNetCore.Authorization
+@using OutletControl.Contracts.Shifts
+@using OutletControl.Web.Services
+
+@attribute [Authorize(Roles = "Cashier")]
+
+@inject ShiftApiService ShiftApiService
+@inject NavigationManager Navigation
+
+<PageTitle>واجهة الكاشير - Outlet Control</PageTitle>
+
+<div class="cashier-page" dir="rtl">
+
+    <div class="cashier-shell">
+
+        <header class="cashier-header">
+
+            <div>
+                <span class="cashier-eyebrow">
+                    التشغيل اليومي
+                </span>
+
+                <h1>واجهة الكاشير</h1>
+
+                <p>
+                    البيع والمخزون وإدارة يوم العمل
+                </p>
+            </div>
+
+            @if (!_isLoading)
+            {
+                <span class="@GetShiftStatusCss()">
+                    @(_openShift is null
+                        ? "اليوم مغلق"
+                        : "اليوم مفتوح")
+                </span>
+            }
+
+        </header>
+
+        @if (_isLoading)
+        {
+            <div class="cashier-state">
+                جاري تحميل حالة اليوم...
+            </div>
+        }
+        else if (!string.IsNullOrWhiteSpace(_errorMessage))
+        {
+            <div class="cashier-state error">
+                @_errorMessage
+            </div>
+        }
+        else
+        {
+            @if (_openShift is null)
+            {
+                <section class="start-day-card">
+
+                    <div class="start-day-icon">
+                        ◷
+                    </div>
+
+                    <div class="start-day-content">
+                        <span>اليوم غير مفتوح</span>
+                        <strong>ابدأ يوم العمل قبل تسجيل المبيعات</strong>
+                    </div>
+
+                    <button type="button"
+                            @onclick="GoToOpenShift">
+                        فتح اليوم
+                    </button>
+
+                </section>
+            }
+            else
+            {
+                <section class="shift-summary">
+
+                    <div>
+                        <span>وقت الفتح</span>
+                        <strong>
+                            @(_openShift.OpenedAt
+                            .ToLocalTime()
+                            .ToString("hh:mm tt"))
+                        </strong>
+                    </div>
+
+                    <div>
+                        <span>مبيعات اليوم</span>
+                        <strong>
+                            @_openShift.SalesAmount.ToString("0.##") ج
+                        </strong>
+                    </div>
+
+                </section>
+            }
+
+            <section class="cashier-actions">
+
+                <button type="button"
+                        class="cashier-card primary-card"
+                        disabled="@(_openShift is null)"
+                        @onclick="GoToPos">
+
+                    <div class="card-icon">
+                        🛒
+                    </div>
+
+                    <div class="card-content">
+                        <strong>
+                            شاشة البيع
+                        </strong>
+
+                        <span>
+                            @(_openShift is null
+                                ? "افتح اليوم أولًا لبدء البيع"
+                                : "بدء عملية بيع جديدة")
+                        </span>
+                    </div>
+
+                    <span class="card-arrow">
+                        ←
+                    </span>
+
+                </button>
+
+                <button type="button"
+                        class="cashier-card"
+                        @onclick="GoToInventory">
+
+                    <div class="card-icon">
+                        📦
+                    </div>
+
+                    <div class="card-content">
+                        <strong>
+                            المخزون
+                        </strong>
+
+                        <span>
+                            مراجعة الكميات الحالية للمنتجات
+                        </span>
+                    </div>
+
+                    <span class="card-arrow">
+                        ←
+                    </span>
+
+                </button>
+
+                @if (_openShift is not null)
+                {
+                    <button type="button"
+                            class="cashier-card close-card"
+                            @onclick="GoToCloseShift">
+
+                        <div class="card-icon">
+                            🔒
+                        </div>
+
+                        <div class="card-content">
+                            <strong>
+                                إغلاق اليوم
+                            </strong>
+
+                            <span>
+                                مراجعة الكاش وإغلاق يوم العمل
+                            </span>
+                        </div>
+
+                        <span class="card-arrow">
+                            ←
+                        </span>
+
+                    </button>
+                }
+
+                <button type="button"
+                        class="cashier-card"
+                        @onclick="GoToReceiving">
+
+                    <div class="card-icon">
+                        📥
+                    </div>
+
+                    <div class="card-content">
+                        <strong>
+                            استلام بضاعة
+                        </strong>
+
+                        <span>
+                            تسجيل البضاعة الواردة إلى المنفذ
+                        </span>
+                    </div>
+
+                    <span class="card-arrow">
+                        ←
+                    </span>
+
+                </button>
+
+            </section>
+        }
+
+    </div>
+
+</div>
+
+@code {
+    private const int OutletId = 1;
+
+    private ShiftDto? _openShift;
+
+    private bool _isLoading = true;
+
+    private string? _errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _errorMessage = null;
+
+            _openShift =
+                await ShiftApiService
+                    .GetOpenShiftAsync(
+                        OutletId);
+        }
+        catch (Exception ex)
+        {
+            _errorMessage =
+                ex.Message;
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private string GetShiftStatusCss()
+    {
+        return _openShift is null
+            ? "shift-status closed"
+            : "shift-status open";
+    }
+
+    private void GoToOpenShift()
+    {
+        Navigation.NavigateTo(
+            "/shift/open");
+    }
+
+    private void GoToPos()
+    {
+        if (_openShift is null)
+            return;
+
+        Navigation.NavigateTo(
+            "/pos");
+    }
+
+    private void GoToInventory()
+    {
+        Navigation.NavigateTo(
+            "/inventory");
+    }
+
+    private void GoToCloseShift()
+    {
+        if (_openShift is null)
+            return;
+
+        Navigation.NavigateTo(
+            "/shift/close");
+    }
+
+    private void GoToReceiving()
+    {
+        Navigation.NavigateTo("/receiving");
+    }
+}

@@ -1,0 +1,258 @@
+﻿@page "/admin/settings"
+
+@using Microsoft.AspNetCore.Authorization
+@using OutletControl.Contracts.Outlets
+@using OutletControl.Web.Services
+
+@attribute [Authorize(Roles = "Admin")]
+
+@inject OutletSettingsApiService OutletSettingsApiService
+@inject NavigationManager Navigation
+
+<PageTitle>إعدادات المنفذ - Outlet Control</PageTitle>
+
+<div class="settings-page" dir="rtl">
+
+    <div class="settings-shell">
+
+        <header class="settings-header">
+            <div>
+                <span class="settings-eyebrow">إدارة النظام</span>
+                <h1>إعدادات المنفذ</h1>
+                <p>بيانات الشركة والمنفذ التي تظهر داخل النظام.</p>
+            </div>
+
+            <button type="button"
+                    class="back-btn"
+                    @onclick="GoBack">
+                رجوع
+            </button>
+        </header>
+
+        @if (_isLoading)
+        {
+            <div class="state-card">
+                جاري تحميل الإعدادات...
+            </div>
+        }
+        else if (!string.IsNullOrWhiteSpace(_loadError))
+        {
+            <div class="state-card error">
+                @_loadError
+            </div>
+        }
+        else
+        {
+            <section class="settings-card">
+
+                <div class="form-grid">
+
+                    <div class="form-group">
+                        <label>اسم المنفذ</label>
+                        <input type="text"
+                               @bind="_name" />
+                    </div>
+
+                    <div class="form-group">
+                        <label>اسم الشركة</label>
+                        <input type="text"
+                               @bind="_companyName"
+                               placeholder="مثال: Friday Ice Cream" />
+                    </div>
+
+                    <div class="form-group full">
+                        <label>العنوان</label>
+                        <input type="text"
+                               @bind="_address" />
+                    </div>
+
+                    <div class="form-group">
+                        <label>رقم الهاتف</label>
+                        <input type="text"
+                               @bind="_phone" />
+                    </div>
+
+                    <div class="form-group">
+                        <label>الرقم الضريبي</label>
+                        <input type="text"
+                               @bind="_taxNumber" />
+                    </div>
+
+                    <div class="form-group">
+                        <label>العملة</label>
+                        <select @bind="_currencyCode">
+                            <option value="EGP">EGP - جنيه مصري</option>
+                            <option value="USD">USD - دولار أمريكي</option>
+                            <option value="SAR">SAR - ريال سعودي</option>
+                            <option value="AED">AED - درهم إماراتي</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>رابط اللوجو</label>
+                        <input type="text"
+                               @bind="_logoUrl"
+                               placeholder="/uploads/logo.png" />
+                    </div>
+
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(_message))
+                {
+                    <div class="@GetMessageCss()">
+                        @_message
+                    </div>
+                }
+
+                <div class="actions">
+                    <button type="button"
+                            class="save-btn"
+                            disabled="@_isSaving"
+                            @onclick="SaveAsync">
+                        @(_isSaving
+                            ? "جاري الحفظ..."
+                            : "حفظ الإعدادات")
+                    </button>
+                </div>
+
+            </section>
+        }
+
+    </div>
+
+</div>
+
+@code {
+    private bool _isLoading = true;
+    private bool _isSaving;
+    private bool _success;
+
+    private string? _loadError;
+    private string? _message;
+
+    private string _name = string.Empty;
+    private string? _companyName;
+    private string? _address;
+    private string? _phone;
+    private string? _taxNumber;
+    private string _currencyCode = "EGP";
+    private string? _logoUrl;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var settings =
+                await OutletSettingsApiService
+                    .GetCurrentAsync();
+
+            if (settings is null)
+            {
+                _loadError =
+                    "تعذر تحميل إعدادات المنفذ.";
+                return;
+            }
+
+            _name =
+                settings.Name;
+
+            _companyName =
+                settings.CompanyName;
+
+            _address =
+                settings.Address;
+
+            _phone =
+                settings.Phone;
+
+            _taxNumber =
+                settings.TaxNumber;
+
+            _currencyCode =
+                settings.CurrencyCode;
+
+            _logoUrl =
+                settings.LogoUrl;
+        }
+        catch (Exception ex)
+        {
+            _loadError =
+                ex.Message;
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        try
+        {
+            _isSaving = true;
+            _message = null;
+            _success = false;
+
+            var result =
+                await OutletSettingsApiService
+                    .UpdateCurrentAsync(
+                        new UpdateOutletSettingsRequest
+                        {
+                            Name =
+                                _name,
+
+                            CompanyName =
+                                _companyName,
+
+                            Address =
+                                _address,
+
+                            Phone =
+                                _phone,
+
+                            TaxNumber =
+                                _taxNumber,
+
+                            CurrencyCode =
+                                _currencyCode,
+
+                            LogoUrl =
+                                _logoUrl
+                        });
+
+            if (result is null)
+            {
+                _message =
+                    "تعذر حفظ الإعدادات.";
+                return;
+            }
+
+            _success = true;
+            _message =
+                "تم حفظ إعدادات المنفذ بنجاح.";
+        }
+        catch (Exception ex)
+        {
+            _success = false;
+            _message =
+                ex.Message;
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    private string GetMessageCss()
+    {
+        return _success
+            ? "page-message success"
+            : "page-message error";
+    }
+
+    private void GoBack()
+    {
+        Navigation.NavigateTo(
+            "/admin");
+    }
+}

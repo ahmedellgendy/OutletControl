@@ -1,0 +1,355 @@
+﻿@page "/admin/opening-stock"
+
+@using OutletControl.Contracts.Inventory
+@using OutletControl.Web.Services
+@using Microsoft.AspNetCore.Authorization
+
+@attribute [Authorize(Roles = "Owner,Admin")]
+
+
+@inject InventoryApiService InventoryApiService
+@inject NavigationManager Navigation
+
+<PageTitle>الرصيد الافتتاحي - Outlet Control</PageTitle>
+
+<div class="opening-page" dir="rtl">
+
+    <div class="opening-shell">
+
+        <header class="page-header">
+
+            <div class="page-title">
+                <span class="page-eyebrow">إدارة النظام</span>
+                <h1>الرصيد الافتتاحي</h1>
+                <p>سجل الكمية الموجودة حاليًا للمنتجات التي لم يتم تسجيل رصيد افتتاحي لها بعد</p>
+            </div>
+
+            <button type="button"
+                    class="back-btn"
+                    @onclick="GoDashboard">
+                رجوع
+            </button>
+
+        </header>
+
+        @if (_isLoading)
+        {
+            <div class="state-message">
+                جاري تحميل المنتجات...
+            </div>
+        }
+        else if (!string.IsNullOrWhiteSpace(_errorMessage))
+        {
+            <div class="state-message error">
+                @_errorMessage
+            </div>
+        }
+        else if (_items.Count == 0)
+        {
+            <div class="empty-state">
+                <div class="empty-icon">✓</div>
+                <strong>تم تسجيل الرصيد الافتتاحي لكل المنتجات</strong>
+                <span>لا توجد منتجات متبقية تحتاج إلى رصيد افتتاحي.</span>
+            </div>
+        }
+        else
+        {
+            <div class="opening-summary">
+
+                <div>
+                    <span>منتجات متبقية</span>
+                    <strong>@_items.Count</strong>
+                </div>
+
+                <div>
+                    <span>إجمالي الكمية المدخلة</span>
+                    <strong>@TotalQuantity</strong>
+                </div>
+
+                <div>
+                    <span>منتجات لها كمية</span>
+                    <strong>@ProductsWithQuantity</strong>
+                </div>
+
+            </div>
+
+            <div class="opening-card">
+
+                @foreach (var group in GroupedProducts)
+                {
+                    <section class="category-section">
+
+                        <div class="category-header">
+
+                            <div>
+                                <span class="category-eyebrow">تصنيف</span>
+                                <h2>@group.Key</h2>
+                            </div>
+
+                            <span class="category-count">
+                                @group.Count() منتج
+                            </span>
+
+                        </div>
+
+                        <div class="products-grid">
+
+                            @foreach (var item in group)
+                            {
+                                <article class="@GetItemCss(item)">
+
+                                    <div class="product-image-wrapper">
+
+                                        @if (!string.IsNullOrWhiteSpace(item.Product.ImageUrl))
+                                        {
+                                            <img src="@item.Product.ImageUrl"
+                                                 alt="@item.Product.ProductName"
+                                                 class="product-image" />
+                                        }
+                                        else
+                                        {
+                                            <div class="product-image-placeholder">
+                                                <span>🍦</span>
+                                                <small>لا توجد صورة</small>
+                                            </div>
+                                        }
+
+                                    </div>
+
+                                    <div class="product-info">
+
+                                        <span class="product-category">
+                                            @item.Product.CategoryName
+                                        </span>
+
+                                        <strong class="product-name">
+                                            @item.Product.ProductName
+                                        </strong>
+
+                                        <div class="quantity-group">
+
+                                            <label>
+                                                الكمية الافتتاحية
+                                            </label>
+
+                                            <div class="quantity-input">
+                                                <input type="number"
+                                                       min="0"
+                                                       @bind="item.Quantity" />
+
+                                                <span>قطعة</span>
+                                            </div>
+
+                                        </div>
+
+                                    </div>
+
+                                </article>
+                            }
+
+                        </div>
+
+                    </section>
+                }
+
+                <div class="opening-footer">
+
+                    <div class="footer-summary">
+                        <span>إجمالي الكمية المراد تسجيلها</span>
+
+                        <strong>
+                            @TotalQuantity قطعة
+                        </strong>
+                    </div>
+
+                    @if (!string.IsNullOrWhiteSpace(_message))
+                    {
+                        <div class="@GetMessageCss()">
+                            @_message
+                        </div>
+                    }
+
+                    <button type="button"
+                            class="save-btn"
+                            disabled="@(_isSaving || TotalQuantity <= 0)"
+                            @onclick="SaveAsync">
+
+                        @if (_isSaving)
+                        {
+                            <span>جاري الحفظ...</span>
+                        }
+                        else
+                        {
+                            <span>حفظ الرصيد الافتتاحي</span>
+                        }
+
+                    </button>
+
+                    <p class="save-note">
+                        المنتجات التي تم تسجيل رصيد افتتاحي لها لن تظهر هنا مرة أخرى.
+                    </p>
+
+                </div>
+
+            </div>
+        }
+
+    </div>
+
+</div>
+
+@code {
+    private const int OutletId = 1;
+
+    private readonly List<OpeningStockProductModel> _items = new();
+
+    private bool _isLoading = true;
+
+    private bool _isSaving;
+
+    private bool _success;
+
+    private string? _message;
+
+    private string? _errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            _isLoading = true;
+            _errorMessage = null;
+
+            _items.Clear();
+
+            var products =
+                await InventoryApiService
+                    .GetOpeningStockProductsAsync(
+                        OutletId);
+
+            _items.AddRange(
+                products
+                    .OrderBy(x => x.CategoryName)
+                    .ThenBy(x => x.DisplayOrder)
+                    .Select(x =>
+                        new OpeningStockProductModel
+                        {
+                            Product = x,
+                            Quantity = 0
+                        }));
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = ex.Message;
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private IEnumerable<
+        IGrouping<string, OpeningStockProductModel>>
+        GroupedProducts =>
+            _items.GroupBy(
+                x => x.Product.CategoryName);
+
+    private int TotalQuantity =>
+        _items.Sum(x => x.Quantity);
+
+    private int ProductsWithQuantity =>
+        _items.Count(x => x.Quantity > 0);
+
+    private async Task SaveAsync()
+    {
+        var itemsToSave =
+            _items
+                .Where(x => x.Quantity > 0)
+                .ToList();
+
+        if (itemsToSave.Count == 0)
+        {
+            _success = false;
+            _message =
+                "أدخل كمية لمنتج واحد على الأقل.";
+            return;
+        }
+
+        try
+        {
+            _isSaving = true;
+            _message = null;
+            _success = false;
+
+            var request =
+                new SetOpeningStockRequest
+                {
+                    OutletId = OutletId,
+
+                    Items = itemsToSave
+                        .Select(x =>
+                            new OpeningStockItemRequest
+                            {
+                                ProductId =
+                                    x.Product.ProductId,
+
+                                Quantity =
+                                    x.Quantity
+                            })
+                        .ToList()
+                };
+
+            await InventoryApiService
+                .SetOpeningStockAsync(request);
+
+            _success = true;
+
+            _message =
+                $"تم حفظ الرصيد الافتتاحي لـ {itemsToSave.Count} منتج بنجاح.";
+
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            _success = false;
+            _message = ex.Message;
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    private string GetMessageCss()
+    {
+        return _success
+            ? "message success"
+            : "message error";
+    }
+
+    private string GetItemCss(
+        OpeningStockProductModel item)
+    {
+        return item.Quantity > 0
+            ? "stock-item has-quantity"
+            : "stock-item";
+    }
+
+    private void GoDashboard()
+    {
+        Navigation.NavigateTo(
+            "/dashboard");
+    }
+
+    private sealed class OpeningStockProductModel
+    {
+        public OpeningStockProductDto Product { get; set; } = default!;
+
+        public int Quantity { get; set; }
+    }
+}

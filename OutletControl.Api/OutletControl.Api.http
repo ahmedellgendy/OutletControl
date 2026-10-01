@@ -1,0 +1,6 @@
+@OutletControl.Api_HostAddress = http://localhost:5195
+
+GET {{OutletControl.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

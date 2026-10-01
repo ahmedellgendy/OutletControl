@@ -1,0 +1,83 @@
+﻿@page "/"
+
+@using Microsoft.AspNetCore.Components.Authorization
+@using OutletControl.Web.Auth
+
+@inject OutletControlAuthenticationStateProvider AuthStateProvider
+@inject NavigationManager Navigation
+
+<PageTitle>Outlet Control</PageTitle>
+
+<div class="redirect-page" dir="rtl">
+    <div class="redirect-card">
+        <div class="redirect-spinner"></div>
+        <strong>جاري تجهيز النظام...</strong>
+        <span>سيتم توجيهك حسب صلاحيات الحساب</span>
+    </div>
+</div>
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        var authState =
+            await AuthStateProvider
+                .GetAuthenticationStateAsync();
+
+        var user =
+            authState.User;
+
+        if (user.Identity?.IsAuthenticated != true)
+        {
+            Navigation.NavigateTo(
+                "/login",
+                forceLoad: true);
+
+            return;
+        }
+
+        var role =
+            user.FindFirst(
+                System.Security.Claims.ClaimTypes.Role)
+                ?.Value;
+
+        if (string.Equals(
+                role,
+                "Admin",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            Navigation.NavigateTo(
+                "/admin",
+                forceLoad: true);
+
+            return;
+        }
+
+        if (string.Equals(
+                role,
+                "Owner",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            Navigation.NavigateTo(
+                "/dashboard",
+                forceLoad: true);
+
+            return;
+        }
+
+        if (string.Equals(
+                role,
+                "Cashier",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            Navigation.NavigateTo(
+                "/cashier",
+                forceLoad: true);
+
+            return;
+        }
+
+        Navigation.NavigateTo(
+            "/login",
+            forceLoad: true);
+    }
+}

@@ -1,0 +1,348 @@
+﻿@page "/admin/categories"
+
+@using OutletControl.Contracts.Catalog
+@using OutletControl.Web.Services
+@using Microsoft.AspNetCore.Authorization
+
+@attribute [Authorize(Roles = "Owner,Admin")]
+
+
+@inject CatalogApiService CatalogApiService
+@inject NavigationManager Navigation
+
+<PageTitle>التصنيفات - Outlet Control</PageTitle>
+
+<div class="categories-page" dir="rtl">
+
+    <div class="categories-shell">
+
+        <header class="page-header">
+
+            <div class="page-title">
+                <span class="page-eyebrow">إدارة النظام</span>
+                <h1>التصنيفات</h1>
+                <p>إدارة فئات المنتجات وترتيب ظهورها</p>
+            </div>
+
+            <button type="button"
+                    class="back-btn"
+                    @onclick="GoDashboard">
+                رجوع
+            </button>
+
+        </header>
+
+        <div class="content-grid">
+
+            <section class="form-card">
+
+                <div class="card-header">
+                    <div>
+                        <span class="card-eyebrow">
+                            @(_editingCategory is null
+                                ? "تصنيف جديد"
+                                : "تعديل التصنيف")
+                        </span>
+
+                        <h2>
+                            @(_editingCategory is null
+                                ? "إضافة تصنيف"
+                                : "تعديل التصنيف")
+                        </h2>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>اسم التصنيف</label>
+
+                    <input @bind="_name"
+                           placeholder="مثال: كونو" />
+                </div>
+
+                <div class="form-group">
+                    <label>الترتيب</label>
+
+                    <input type="number"
+                           min="0"
+                           @bind="_displayOrder" />
+                </div>
+
+                @if (_editingCategory is not null)
+                {
+                    <label class="checkbox-row">
+                        <input type="checkbox"
+                               @bind="_isActive" />
+
+                        <span>التصنيف نشط</span>
+                    </label>
+                }
+
+                @if (!string.IsNullOrWhiteSpace(_message))
+                {
+                    <div class="message">
+                        @_message
+                    </div>
+                }
+
+                <div class="form-actions">
+
+                    <button type="button"
+                            class="save-btn"
+                            disabled="@_isSaving"
+                            @onclick="SaveAsync">
+
+                        @if (_isSaving)
+                        {
+                            <span>جاري الحفظ...</span>
+                        }
+                        else
+                        {
+                            <span>
+                                @(_editingCategory is null
+                                    ? "إضافة التصنيف"
+                                    : "حفظ التعديلات")
+                            </span>
+                        }
+
+                    </button>
+
+                    @if (_editingCategory is not null)
+                    {
+                        <button type="button"
+                                class="cancel-btn"
+                                @onclick="CancelEdit">
+                            إلغاء التعديل
+                        </button>
+                    }
+
+                </div>
+
+            </section>
+
+            <section class="list-card">
+
+                <div class="list-header">
+
+                    <div>
+                        <span class="card-eyebrow">القائمة الحالية</span>
+                        <h2>التصنيفات الحالية</h2>
+                    </div>
+
+                    @if (!_isLoading)
+                    {
+                        <span class="count-badge">
+                            @_categories.Count تصنيف
+                        </span>
+                    }
+
+                </div>
+
+                @if (_isLoading)
+                {
+                    <div class="state-message">
+                        جاري التحميل...
+                    </div>
+                }
+                else if (_categories.Count == 0)
+                {
+                    <div class="empty-state">
+                        <div class="empty-icon">🗂️</div>
+                        <strong>لا توجد تصنيفات</strong>
+                        <span>ابدأ بإضافة أول تصنيف للمنتجات.</span>
+                    </div>
+                }
+                else
+                {
+                    <div class="categories-list">
+
+                        @foreach (var category in _categories)
+                        {
+                            <article class="@GetRowCss(category)">
+
+                                <div class="category-main">
+
+                                    <div class="category-index">
+                                        @category.DisplayOrder
+                                    </div>
+
+                                    <div class="category-info">
+                                        <strong>@category.Name</strong>
+
+                                        <span>
+                                            ترتيب الظهور:
+                                            @category.DisplayOrder
+                                        </span>
+                                    </div>
+
+                                </div>
+
+                                <div class="row-actions">
+
+                                    <span class="@GetStatusCss(category)">
+                                        @(category.IsActive
+                                            ? "نشط"
+                                            : "متوقف")
+                                    </span>
+
+                                    <button type="button"
+                                            class="edit-btn"
+                                            @onclick="() => Edit(category)">
+                                        تعديل
+                                    </button>
+
+                                </div>
+
+                            </article>
+                        }
+
+                    </div>
+                }
+
+            </section>
+
+        </div>
+
+    </div>
+
+</div>
+
+@code {
+    private readonly List<CategoryDto> _categories = new();
+
+    private CategoryDto? _editingCategory;
+
+    private string _name = string.Empty;
+
+    private int _displayOrder;
+
+    private bool _isActive = true;
+
+    private bool _isLoading = true;
+
+    private bool _isSaving;
+
+    private string? _message;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            _isLoading = true;
+
+            _categories.Clear();
+
+            var result =
+                await CatalogApiService.GetCategoriesAsync();
+
+            _categories.AddRange(
+                result.OrderBy(x => x.DisplayOrder));
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_name))
+        {
+            _message = "اكتب اسم التصنيف.";
+            return;
+        }
+
+        try
+        {
+            _isSaving = true;
+            _message = null;
+
+            if (_editingCategory is null)
+            {
+                await CatalogApiService.CreateCategoryAsync(
+                    new CreateCategoryRequest
+                    {
+                        Name = _name,
+                        DisplayOrder = _displayOrder
+                    });
+            }
+            else
+            {
+                await CatalogApiService.UpdateCategoryAsync(
+                    _editingCategory.Id,
+                    new UpdateCategoryRequest
+                    {
+                        Name = _name,
+                        DisplayOrder = _displayOrder,
+                        IsActive = _isActive
+                    });
+            }
+
+            ResetForm();
+
+            await LoadAsync();
+
+            _message = "تم الحفظ بنجاح.";
+        }
+        catch
+        {
+            _message = "تعذر حفظ التصنيف.";
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    private void Edit(CategoryDto category)
+    {
+        _editingCategory = category;
+
+        _name = category.Name;
+
+        _displayOrder = category.DisplayOrder;
+
+        _isActive = category.IsActive;
+
+        _message = null;
+    }
+
+    private void CancelEdit()
+    {
+        ResetForm();
+    }
+
+    private void ResetForm()
+    {
+        _editingCategory = null;
+
+        _name = string.Empty;
+
+        _displayOrder = 0;
+
+        _isActive = true;
+    }
+
+    private string GetStatusCss(CategoryDto category)
+    {
+        return category.IsActive
+            ? "status-badge active"
+            : "status-badge inactive";
+    }
+
+    private string GetRowCss(CategoryDto category)
+    {
+        return category.IsActive
+            ? "category-row"
+            : "category-row inactive-row";
+    }
+
+    private void GoDashboard()
+    {
+        Navigation.NavigateTo("/dashboard");
+    }
+}
