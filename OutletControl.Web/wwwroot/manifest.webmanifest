@@ -1,11 +1,11 @@
 {
-  "name": "OutletControl.Web",
-  "short_name": "OutletControl.Web",
+  "name": "Outlet Control",
+  "short_name": "Outlet Control",
   "id": "./",
   "start_url": "./",
   "display": "standalone",
   "background_color": "#ffffff",
-  "theme_color": "#03173d",
+  "theme_color": "#d92d20",
   "prefer_related_applications": false,
   "icons": [
     {
